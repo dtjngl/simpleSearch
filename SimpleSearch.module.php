@@ -32,11 +32,14 @@ class SimpleSearch extends WireData implements Module {
 
         $this->inputSanitized = $this->sanitizeInput();
 
-        $this->limit = 5;
-        $this->sublimit = 6;
+        $this->limit = 20;
+        $this->sublimit = 10;
         // $this->start = $this->updateStart();
         $this->start = $this->limit * ($this->input->pageNum() - 1);
 
+        // Explicitly load the MarkupPagerNav module
+        $this->pager = $this->modules->get('MarkupPagerNav');
+        
         $this->handleSearch();
     
     }
@@ -149,7 +152,7 @@ class SimpleSearch extends WireData implements Module {
 
         if (!$this->q) return;
 
-        $html = '<h2>CRITERIA</h2>';
+        $html = '';
 
         if (isset($this->cat) && $this->cat > 0 ) {
             $html .= "in: ";
@@ -177,16 +180,12 @@ class SimpleSearch extends WireData implements Module {
 
         if (!$this->q) return;
 
-        $html = '<h2>OVERVIEW</h2>';
+        $html = '';
 
         // overview :D
 
         $cat = $this->cat;
         $allTotals = $this->totals->eq(0);
-
-        echo '<pre>';
-        print_r($this->totals);
-        echo '</pre>';
 
         if ($allTotals > 0) {
             if ($cat == 0 || !$cat) {
@@ -226,7 +225,7 @@ class SimpleSearch extends WireData implements Module {
         $allTotals = $this->totals->eq(0);
         $cat = $this->cat;
 
-        $html = '<h2>RESULTS</h2>';
+        $html = '';
 
         // results :D
 
@@ -238,21 +237,22 @@ class SimpleSearch extends WireData implements Module {
 
                 $html .= '<h3><a class="colorlinks" href="./?q=' . $this->q . '&cat=' . $key . '">' . $this->labels->eq($key) . ' (' . $total . ')</a></h3>';
                 $html .= '<ul class="nostyle">';
-                
-                $i = 1;
-                foreach ($matches as $match) {
+
+                $limit = $this->sublimit;
+
+                $matches->filter("limit=$limit");
+
+                foreach ($matches as $i => $match) {
                     $source = $this->indexedCategories[$cat];
                     // $html .= layout('search_' . $source, $item);
-                    $html .= $i . ' - ';
-                    $html .= $match->title;
+                    $html .= '<a href="'.$match->url.'" target="_blank">'.$match->title.'</a>';
                     $html .= '<hr>';
-                    $i++;
                 }
 
                 $html .= '</ul>';
 
                 if ($total > $this->sublimit && $cat == 0) {
-                    $html .= '<h3><a class="colorlinks" href="./?q=' . $this->q . '&cat=' . $this->key . '">mehr…</a></h3>';
+                    $html .= '<h3><a class="colorlinks" href="./?q=' . $this->q . '&cat=' . $key . '">mehr…</a></h3>';
                 }
 
                 $html .= '<hr>';
@@ -262,26 +262,18 @@ class SimpleSearch extends WireData implements Module {
             $html .= '<h3><strong>' . $this->templates->get($this->indexedCategories[$cat])->label . ' (' . $total . ')</strong></h3>';
             $html .= '<ul class="nostyle">';
 
-            $i = 1;
-
             $matches = $this->results->eq($cat);
             $start = $this->updateStart();
             $limit = $this->limit;
             $pagMatches = $matches->find("start=$start, limit=$limit");
-            // $this->start = $this->updateStart();
-            // $matches->setStart($this->start);
-            // $matches->setLimit($this->limit);
-            // $start = $this->updateStart();
-            // $limit = $this->limit;
-            // $this->results->set($cat, $matches->filter("start=$start, limit=$limit"));
 
-            foreach ($pagMatches as $match) {
+            foreach ($pagMatches as $i => $match) {
                 // $source = $this->templates->get($this->indexedCategories[$cat])->label;
                 // $html .= layout('search_' . $source, $item);
-                $html .= $i . ' - ';
-                $html .= $match->title;
+                $ii = $i + 1;
+                $html .= $ii . ' - ';
+                $html .= '<a href="'.$match->url.'" target="_blank">'.$match->title.'</a>';
                 $html .= '<hr>';
-                $i++;
             }
 
             $html .= '</ul>';
@@ -305,35 +297,24 @@ class SimpleSearch extends WireData implements Module {
 
         if ($cat > 0) {
 
-            $html .= '<h2>PAGINATION STRING</h2>';
-
             $matches = $this->results->eq($cat);
             $start = $this->updateStart();
-            echo "start: " . $start;
             $limit = $this->limit;
-            echo ", limit: " . $limit;
             $pagMatches = $matches->find("start=$start, limit=$limit");
-            // $this->start = $this->updateStart();
-            // $matches->setStart($this->start);
-            // $matches->setLimit($this->limit);
-            // $start = $this->updateStart();
-            // $limit = $this->limit;
-
-            // $matches->filter("start=$start, limit=$limit");
 
             if ($pagMatches->count) {
                 $html .= '<span class="grey">' . $pagMatches->getPaginationString(array(
                     'label' => 'Einträge',
                     'zeroLabel' => '0 Einträge', // 3.0.127+ only
                     'usePageNum' => false,
-                    // 'count' => $pagMatches->count(),
-                    // 'start' => $pagMatches->getStart(),
-                    // 'limit' => $pagMatches->getLimit(),
-                    // 'total' => $this->totals->eq($cat)
                     'count' => $pagMatches->count(),
-                    'start' => $this->updateStart(),
-                    'limit' => $this->limit,
+                    'start' => $pagMatches->getStart(),
+                    'limit' => $pagMatches->getLimit(),
                     'total' => $this->totals->eq($cat)
+                    // 'count' => $pagMatches->count(),
+                    // 'start' => $this->updateStart(),
+                    // 'limit' => $this->limit,
+                    // 'total' => $this->totals->eq($cat)
                 )) . '</span>';
             }
         }
@@ -358,41 +339,49 @@ class SimpleSearch extends WireData implements Module {
     
 
     public function renderPaginationMarkup() {
-
+    
         $options = array(
             'listClass' => 'pagination noselect uk-flex uk-flex-wrap uk-flex-center',
             'linkMarkup' => "<a href='{url}?q={$this->q}&cat={$this->cat}'>{out}</a>",
             'currentItemClass' => 'current',
-            'separatorItemLabel' => '<span>&hellip;</span>',
+            'separatorItemLabel' => '…',
             'separatorItemClass' => 'uk-disabled',
             'previousItemClass' => 'nextprev',
             'nextItemClass' => 'nextprev',
-            'currentLinkMarkup' => "<a>{out}</a>",
+            'currentLinkMarkup' => '<span class="current">{out}</span>',
             'nextItemLabel' => '<span uk-icon="icon: arrow-right; ratio: 1.8;"></span>',
             'previousItemLabel' => '<span uk-icon="icon: arrow-left; ratio: 1.8;"></span>',
             'numPageLinks' => '4',
             'lastItemClass' => ''
         );
+        
+        $html = '';
+    
+        // Get the total number of results for the current category
+        $totalResults = $this->totals->eq($this->cat);
+    
+        $pager = $this->wire('modules')->get('MarkupPagerNav');
 
-        $html = '<h2>PAGINATION</h2>';
-
-        $matches = $this->results->eq($this->cat);
-        $start = $this->updateStart();
-        $limit = $this->limit;
-        $pagMatches = $matches->find("start=$start, limit=$limit");
-
+        // Check if we need to render pagination links
         if ($this->cat > 0 && $this->q != '') {
-            // $matches->setStart($this->updateStart());
-            $pager = $this->modules->get("MarkupPagerNav");
-            $html .= '<section>:';
-            $html .= '<div class="uk-flex uk-flex-center">' . $pager->render($pagMatches, $options) . '</div>';
-            $html .= ':</section>';
-        }
-
+            // Update the 'total' option in the $options array with the total number of results
+            $options['total'] = $totalResults;
+    
+            // Create a new WireArray containing only the paginated matches
+            $matches = $this->results->eq($this->cat);
+            $start = $this->updateStart();
+            $limit = $this->limit;
+            $matches->setStart($start);
+            $matches->setLimit($limit);
+        
+            // Render the pagination links
+            $html .= '<section>';
+            $html .= '<div class="uk-flex uk-flex-center">' . $pager->render($matches, $options) . '</div>';
+            $html .= '</section>';
+        } 
+    
         // Return the stored HTML
         return $html;
-                
     }
-
-    
+        
 }
