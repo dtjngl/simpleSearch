@@ -69,7 +69,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         // For example, to index all pages from the "project" and "article" templates:
         return ['', 'project', 'article'];
     }
-    
 
     protected function updateStart() {
 
@@ -77,7 +76,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         return $start;
     
     }
-
 
     protected function sanitizeInput() {
 
@@ -101,7 +99,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     }
     
-
     public function handleSearch($page) {
 
         echo $page->title;
@@ -138,8 +135,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
             }
 
-
-
             $this->results->prepend('');
             $this->totals->prepend($allTotals);
             $this->labels->prepend($this->allResultsLabel);
@@ -150,85 +145,9 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         } 
         
     }
-
-    // protected function isValueInCurrentLanguage(Page $page, $value) {
-    //     $language = $this->wire('user')->language;
-    //     $fields = $this->getUniqueFieldsFromTemplate($page->template);
-    //     foreach ($fields as $field) {
-    //         $fieldValue = $page->getLanguageValue($language, $field);
-    //         if (stripos($fieldValue, $value) !== false) {
-    //             return true;
-    //         }
-    //     }
-    //     return false;
-    // }
-
-    // human generated code :D
-
-
-    
-    protected function getCurrentPageLanguage() {
-    
-        $currentPage = $this->page;
-        // Check if $currentPage is not null before accessing its properties
-        // Now you have the current page and can perform operations on it
-        // For example, you can access its properties, template, parent, children, etc.
-        $pageTitle = $currentPage->title;
-        $pageTemplate = $currentPage->template->name;
-        $pageParent = $currentPage->parent->name;
-        $pageChildrenCount = count($currentPage->children ?? []);
-        // ... and so on
-
-        echo $pageTitle;
-
-        // $languages = languages(); // Get all defined languages
-        // $segments = $this->input->urlSegments;
-        
-        // $languageSegment = $segments[0]; // The first segment is the language segment
-    
-        // foreach ($languages as $language) {
-        //     return $language;
-        // }
-    
-        // // Return the default language if the current language segment is not found
-        // return $languages->getDefault();
-
-        
-        // $language = $currentPage->getLanguage();
-        // echo $language;
-
-        // $homepage = $this->pages->get('/'); 
-        // $html = '';
-
-        // foreach ($this->languages as $language):
-        //     $page = wire('page');
-        //     // $url = $this->localUrl($language);
-        //     $hreflang = $homepage->getLanguageValue($language, 'name');
-        //     // if (!$page->viewable($language)) continue; // is page viewable in this language?
-        //     if ($language->id == $this->user->language->id) {
-        //         // Add the link with active class to the HTML variable
-        //         $html .= '<strong>'.$language->name.'</strong>';
-        //     } else {
-        //         // Add the link with inactive class to the HTML variable
-        //         $html .= $language->name;
-        //     }
-        // endforeach;
-
-        // // Output the generated HTML
-        // return $html;
-
-    }
     
         
     protected function filterCurrentLanguage($items, $q) {
-
-        echo $this->getCurrentPageLanguage();
-
-        // $language = $this->getCurrentPageLanguage();
-        // echo $language->title;
-
-        $languageSegment = $this->getLanguageSegmentFromUrl();
-        // $language = $this->getLanguageBySegment($languageSegment);
 
         $filteredItems = new PageArray;
 
@@ -258,70 +177,28 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     }
     
 
-    
-    // protected function createSelector($q, $category) {
-
-    //     $selector = "template=" . $category;
-
-    //     $fields = $this->getUniqueFieldsFromTemplate($category);
-    //     $this->uniqueFields = $fields;
-    //     $selector .= ", " . implode('|', $fields) . "~=$q";
-
-    //     return $selector;
-
-    // }
-
-
     protected function createSelector($q, $category) {
         $selector = "template=$category";
         $fields = $this->getUniqueFieldsFromTemplate($category);
         $this->uniqueFields = $fields;
-
-        // $languages = $this->languages;
-        // $currentLanguageId = $this->user->language->id;
     
         $subselectors = array();
 
-
-
-
-
-            // $output .= $target_page->$fieldName->getLanguageValue($target_language);
-
-            // $target_page->$fieldName->setLanguageValue($target_language, $fieldValue);
-
-
-
-
-
-
-
-        // foreach ($fields as $field) {
-        //     $subselector = "$field~=$q";
-        //     if ($field instanceof Field && $field->type instanceof FieldtypeLanguage) {
-        //         // Add OR condition for each language
-        //         foreach ($languages as $language) {
-        //             if ($language->id !== $currentLanguageId) {
-        //                 $langField = $field->name . $language->id;
-        //                 $subselector .= ", $langField~=$q";
-        //             }
-        //         }
-        //     }
-        //     $subselectors[] = "($subselector)";
-        // }
-    
-        // // Check if the query contains language-specific characters
-        // if ($this->languages->getLanguage($q) !== null) {
-        //     $subselectors[] = "title|body~=$q";
-        // }
-    
-        // $languages = languages();
-
-        // echo '<pre>';
-        // print_r($languages);
-        // echo '</pre>';
-
-        // $selector .= ", (" . implode('|', $subselectors) . ")";
+        foreach ($fields as $field) {
+            $subselector = "$field~=$q";
+            if ($field instanceof Field && $field->type instanceof FieldtypeLanguage) {
+                // Add OR condition for each language
+                foreach ($languages as $language) {
+                    if ($language->id !== $currentLanguageId) {
+                        $langField = $field->name . $language->id;
+                        $subselector .= ", $langField~=$q";
+                    }
+                }
+            }
+            $subselectors[] = "($subselector)";
+        }
+        
+        $selector .= ", (" . implode('|', $subselectors) . ")";
         return $selector;
     }
 
@@ -372,7 +249,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     }
 
-
     public function renderOverviewMarkup() {
 
         if (!$this->q) return;
@@ -413,7 +289,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         return $html;
 
     }
-
 
     public function renderResultsMarkup() {
 
@@ -523,7 +398,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     }
 
-
     public function renderPaginationString() {
 
         if (!$this->q) return;
@@ -562,7 +436,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         
     }
 
-
     public function renderFilters() {
 
         $html = '<form action="./" method="get">';
@@ -576,7 +449,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     }
     
-
     public function renderPaginationMarkup() {
     
         $options = array(
