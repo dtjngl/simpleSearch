@@ -147,34 +147,34 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     }
     
         
-    protected function filterCurrentLanguage($items, $q) {
+    // protected function filterCurrentLanguage($items, $q) {
 
-        $filteredItems = new PageArray;
+    //     $filteredItems = new PageArray;
 
-        foreach ($items as $item) {
-            $fields = $this->getUniqueFieldsFromTemplate($item->template);
-            $foundInCurrentLanguage = false;
+    //     foreach ($items as $item) {
+    //         $fields = $this->getUniqueFieldsFromTemplate($item->template);
+    //         $foundInCurrentLanguage = false;
 
-            foreach ($fields as $field) {
-                $fieldValue = $item->getLanguageValue($language, $field);
-                if (stripos($fieldValue, $q) !== false) {
-                    // echo '<h1>'.strlen($fieldValue).'</h1>';
-                    echo '<h1>'.stripos($fieldValue, $q) . ' – ' . $field . ' – ' . $item->template . '</h1>';    
-                    $foundInCurrentLanguage = true;
-                    break;
-                } else {
-                    // echo '<h1>'.stripos($fieldValue, $q).'</h1>';
-                }
-            }
+    //         foreach ($fields as $field) {
+    //             $fieldValue = $item->getLanguageValue($language, $field);
+    //             if (stripos($fieldValue, $q) !== false) {
+    //                 // echo '<h1>'.strlen($fieldValue).'</h1>';
+    //                 echo '<h1>'.stripos($fieldValue, $q) . ' – ' . $field . ' – ' . $item->template . '</h1>';    
+    //                 $foundInCurrentLanguage = true;
+    //                 break;
+    //             } else {
+    //                 // echo '<h1>'.stripos($fieldValue, $q).'</h1>';
+    //             }
+    //         }
     
 
-            if ($foundInCurrentLanguage == true) {
-                $filteredItems->add($item);
-            }
-        }
+    //         if ($foundInCurrentLanguage == true) {
+    //             $filteredItems->add($item);
+    //         }
+    //     }
     
-        return $filteredItems;
-    }
+    //     return $filteredItems;
+    // }
     
 
     protected function createSelector($q, $category) {
