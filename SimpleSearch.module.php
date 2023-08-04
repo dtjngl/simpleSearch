@@ -1,6 +1,8 @@
 <?php namespace ProcessWire; 
 
-class SimpleSearch extends WireData implements Module {
+class SimpleSearch extends WireData implements Module, ConfigurableModule {
+
+    // protected $page;
 
     public static function getModuleInfo() {
 
@@ -8,19 +10,31 @@ class SimpleSearch extends WireData implements Module {
             'title' => 'Simple Search',
             'version' => '1.0.0',
             'summary' => 'A simple search module for ProcessWire.',
-            'autoload' => true,
-            'singular' => true,
+            // 'autoload' => true,
+            // 'singular' => true,
             'icon' => 'search',
             'author' => 'FRE:D',
+            'installs' => [], // Optional array of module names that this module should install, if any
+            'requires' => [], // Optional array of module names that are required for this module to run, if any
+            'settings' => [
+                'limit' => 20, // Default value for the limit setting
+                'sublimit' => 10, // Default value for the sublimit setting
+            ],
         );
 
     }
 
+    public function __construct() {
+        $simpleSearchSettings = wire('modules')->getConfig($this);
+        foreach ($simpleSearchSettings as $key => $value) {
+            $this->$key = $value;
+        }
+    }
 
     public function init() {
 
         // Define the pages to search
-        $this->indexedCategories = ["", "project", "article"];
+        // $this->indexedCategories = ["", "project", "article"];
         $this->allResultsLabel = __("Alle Inhalte");
         
         $this->q = '';
@@ -32,18 +46,30 @@ class SimpleSearch extends WireData implements Module {
 
         $this->inputSanitized = $this->sanitizeInput();
 
-        $this->limit = 20;
-        $this->sublimit = 10;
-        // $this->start = $this->updateStart();
         $this->start = $this->limit * ($this->input->pageNum() - 1);
 
         // Explicitly load the MarkupPagerNav module
         $this->pager = $this->modules->get('MarkupPagerNav');
         
-        $this->handleSearch();
+
+        // Get the indexed templates from the module configuration
+        $indexedTemplates = $this->config->indexedTemplates;
+
+        // If no indexed templates are selected, fallback to indexing all templates
+        if (empty($indexedTemplates)) {
+            $indexedTemplates = $this->getDefaultIndexedTemplates();
+        }
+
+        $this->indexedCategories = $indexedTemplates;
     
     }
 
+    protected function getDefaultIndexedTemplates() {
+        // Return an array of template names you want to index by default.
+        // For example, to index all pages from the "project" and "article" templates:
+        return ['', 'project', 'article'];
+    }
+    
 
     protected function updateStart() {
 
@@ -76,13 +102,16 @@ class SimpleSearch extends WireData implements Module {
     }
     
 
-    protected function handleSearch() {
+    public function handleSearch($page) {
+
+        echo $page->title;
+
+        $this->currentPage = $page;
 
         // Check if the search form was submitted (i.e., input variable exists)
         if ($this->q) {
 
             $indexedCategories = $this->indexedCategories;
-
             $allTotals = 0;
 
             foreach ($indexedCategories as $cat => $category) {
@@ -94,16 +123,22 @@ class SimpleSearch extends WireData implements Module {
 
                 $matches = $this->pages("$selector, start=0, limit=99999");
 
-                // Calculate the total matches and the start index for the current page
-                $total = count($matches);
+                // Filter the matches to include only pages with a matching value in the active language
+                // $filteredMatches = $this->filterCurrentLanguage($matches, $this->q);
+                $filteredMatches = $matches;
 
-                $this->results->set($cat, $matches);
+                // Calculate the total matches and the start index for the current page
+                $total = count($filteredMatches);
+
+                $this->results->set($cat, $filteredMatches);
                 $this->totals->set($cat, $total);
                 $this->labels->set($cat, $this->templates->get("$category")->label);                
 
                 $allTotals += $total;
 
             }
+
+
 
             $this->results->prepend('');
             $this->totals->prepend($allTotals);
@@ -116,16 +151,178 @@ class SimpleSearch extends WireData implements Module {
         
     }
 
+    // protected function isValueInCurrentLanguage(Page $page, $value) {
+    //     $language = $this->wire('user')->language;
+    //     $fields = $this->getUniqueFieldsFromTemplate($page->template);
+    //     foreach ($fields as $field) {
+    //         $fieldValue = $page->getLanguageValue($language, $field);
+    //         if (stripos($fieldValue, $value) !== false) {
+    //             return true;
+    //         }
+    //     }
+    //     return false;
+    // }
+
+    // human generated code :D
+
+
+    
+    protected function getCurrentPageLanguage() {
+    
+        $currentPage = $this->page;
+        // Check if $currentPage is not null before accessing its properties
+        // Now you have the current page and can perform operations on it
+        // For example, you can access its properties, template, parent, children, etc.
+        $pageTitle = $currentPage->title;
+        $pageTemplate = $currentPage->template->name;
+        $pageParent = $currentPage->parent->name;
+        $pageChildrenCount = count($currentPage->children ?? []);
+        // ... and so on
+
+        echo $pageTitle;
+
+        // $languages = languages(); // Get all defined languages
+        // $segments = $this->input->urlSegments;
+        
+        // $languageSegment = $segments[0]; // The first segment is the language segment
+    
+        // foreach ($languages as $language) {
+        //     return $language;
+        // }
+    
+        // // Return the default language if the current language segment is not found
+        // return $languages->getDefault();
+
+        
+        // $language = $currentPage->getLanguage();
+        // echo $language;
+
+        // $homepage = $this->pages->get('/'); 
+        // $html = '';
+
+        // foreach ($this->languages as $language):
+        //     $page = wire('page');
+        //     // $url = $this->localUrl($language);
+        //     $hreflang = $homepage->getLanguageValue($language, 'name');
+        //     // if (!$page->viewable($language)) continue; // is page viewable in this language?
+        //     if ($language->id == $this->user->language->id) {
+        //         // Add the link with active class to the HTML variable
+        //         $html .= '<strong>'.$language->name.'</strong>';
+        //     } else {
+        //         // Add the link with inactive class to the HTML variable
+        //         $html .= $language->name;
+        //     }
+        // endforeach;
+
+        // // Output the generated HTML
+        // return $html;
+
+    }
+    
+        
+    protected function filterCurrentLanguage($items, $q) {
+
+        echo $this->getCurrentPageLanguage();
+
+        // $language = $this->getCurrentPageLanguage();
+        // echo $language->title;
+
+        $languageSegment = $this->getLanguageSegmentFromUrl();
+        // $language = $this->getLanguageBySegment($languageSegment);
+
+        $filteredItems = new PageArray;
+
+        foreach ($items as $item) {
+            $fields = $this->getUniqueFieldsFromTemplate($item->template);
+            $foundInCurrentLanguage = false;
+
+            foreach ($fields as $field) {
+                $fieldValue = $item->getLanguageValue($language, $field);
+                if (stripos($fieldValue, $q) !== false) {
+                    // echo '<h1>'.strlen($fieldValue).'</h1>';
+                    echo '<h1>'.stripos($fieldValue, $q) . ' – ' . $field . ' – ' . $item->template . '</h1>';    
+                    $foundInCurrentLanguage = true;
+                    break;
+                } else {
+                    // echo '<h1>'.stripos($fieldValue, $q).'</h1>';
+                }
+            }
+    
+
+            if ($foundInCurrentLanguage == true) {
+                $filteredItems->add($item);
+            }
+        }
+    
+        return $filteredItems;
+    }
+    
+
+    
+    // protected function createSelector($q, $category) {
+
+    //     $selector = "template=" . $category;
+
+    //     $fields = $this->getUniqueFieldsFromTemplate($category);
+    //     $this->uniqueFields = $fields;
+    //     $selector .= ", " . implode('|', $fields) . "~=$q";
+
+    //     return $selector;
+
+    // }
+
 
     protected function createSelector($q, $category) {
-
-        $selector = "template=" . $category;
-
+        $selector = "template=$category";
         $fields = $this->getUniqueFieldsFromTemplate($category);
-        $selector .= ", " . implode('|', $fields) . "~=$q";
+        $this->uniqueFields = $fields;
 
+        // $languages = $this->languages;
+        // $currentLanguageId = $this->user->language->id;
+    
+        $subselectors = array();
+
+
+
+
+
+            // $output .= $target_page->$fieldName->getLanguageValue($target_language);
+
+            // $target_page->$fieldName->setLanguageValue($target_language, $fieldValue);
+
+
+
+
+
+
+
+        // foreach ($fields as $field) {
+        //     $subselector = "$field~=$q";
+        //     if ($field instanceof Field && $field->type instanceof FieldtypeLanguage) {
+        //         // Add OR condition for each language
+        //         foreach ($languages as $language) {
+        //             if ($language->id !== $currentLanguageId) {
+        //                 $langField = $field->name . $language->id;
+        //                 $subselector .= ", $langField~=$q";
+        //             }
+        //         }
+        //     }
+        //     $subselectors[] = "($subselector)";
+        // }
+    
+        // // Check if the query contains language-specific characters
+        // if ($this->languages->getLanguage($q) !== null) {
+        //     $subselectors[] = "title|body~=$q";
+        // }
+    
+        // $languages = languages();
+
+        // echo '<pre>';
+        // print_r($languages);
+        // echo '</pre>';
+
+        // $selector .= ", (" . implode('|', $subselectors) . ")";
         return $selector;
-
     }
 
 
@@ -246,6 +443,10 @@ class SimpleSearch extends WireData implements Module {
                     $source = $this->indexedCategories[$cat];
                     // $html .= layout('search_' . $source, $item);
                     $html .= '<a href="'.$match->url.'" target="_blank">'.$match->title.'</a>';
+                    $html .= $this->renderSnippet($match);
+                    if($match->editable()):
+                        $html .= '<p><a href="' . $match->editUrl() . '" target="_blank">Edit this page</a></p>';
+                    endif;
                     $html .= '<hr>';
                 }
 
@@ -254,7 +455,7 @@ class SimpleSearch extends WireData implements Module {
                 if ($total > $this->sublimit && $cat == 0) {
                     $html .= '<h3><a class="colorlinks" href="./?q=' . $this->q . '&cat=' . $key . '">mehr…</a></h3>';
                 }
-
+            
                 $html .= '<hr>';
             }
         } else {
@@ -273,11 +474,49 @@ class SimpleSearch extends WireData implements Module {
                 $ii = $i + 1;
                 $html .= $ii . ' - ';
                 $html .= '<a href="'.$match->url.'" target="_blank">'.$match->title.'</a>';
+                $html .= $this->renderSnippet($match);
+                if($match->editable()):
+                    $html .= '<p><a href="' . $match->editUrl() . '" target="_blank">Edit this page</a></p>';
+                endif;
                 $html .= '<hr>';
             }
 
             $html .= '</ul>';
             $html .= '<hr>';
+
+        }
+
+        return $html;
+
+    }
+
+    protected function renderSnippet($match) {
+
+        // Create an array to store snippets for each field
+        $snippets = array();
+        $html = '';
+        
+        // Find snippets for each field where the search term was found
+        foreach ($this->uniqueFields as $field) {
+            $content = strip_tags($match->$field); // Strip HTML tags from the content
+            if (stripos($content, $this->q) !== false) {
+                // Find the position of the search term in the content
+                $position = stripos($content, $this->q);
+                // Extract a snippet of text around the matched term
+                $startPos = max(0, $position - 25); // Get 50 characters before the matched term
+                $endPos = min(strlen($content), $position + 25); // Get 50 characters after the matched term
+                
+                // Highlight the search term within the snippet using <strong> tags
+                $snippet = substr($content, $startPos, $position - $startPos) . "<strong>" . substr($content, $position, strlen($this->q)) . "</strong>" . substr($content, $position + strlen($this->q), $endPos - ($position + strlen($this->q)));
+                
+                // Add the snippet to the snippets array
+                $snippets[$field] = $snippet;
+            }
+        }
+        
+        // Now, you can include the snippets in your result markup
+        foreach ($snippets as $field => $snippet) {
+            $html .= "<p><strong>$field</strong>...$snippet...</p>";
         }
 
         return $html;
