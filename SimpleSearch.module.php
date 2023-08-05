@@ -64,6 +64,10 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     
     }
 
+    static public function getModuleConfigInputfields(array $data)
+    {
+    }
+    
     protected function getDefaultIndexedTemplates() {
         // Return an array of template names you want to index by default.
         // For example, to index all pages from the "project" and "article" templates:
@@ -99,11 +103,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     }
     
-    public function handleSearch($page) {
-
-        echo $page->title;
-
-        $this->currentPage = $page;
+    public function handleSearch() {
 
         // Check if the search form was submitted (i.e., input variable exists)
         if ($this->q) {
@@ -177,43 +177,59 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     // }
     
 
-    protected function createSelector($q, $category) {
-        $selector = "template=$category";
-        $fields = $this->getUniqueFieldsFromTemplate($category);
-        $this->uniqueFields = $fields;
+    // protected function createSelector($q, $category) {
+    //     $selector = "template=$category";
+    //     $fields = $this->getUniqueFieldsFromTemplate($category);
+    //     $this->uniqueFields = $fields;
     
-        $subselectors = array();
+    //     $subselectors = array();
 
-        foreach ($fields as $field) {
-            $subselector = "$field~=$q";
-            if ($field instanceof Field && $field->type instanceof FieldtypeLanguage) {
-                // Add OR condition for each language
-                foreach ($languages as $language) {
-                    if ($language->id !== $currentLanguageId) {
-                        $langField = $field->name . $language->id;
-                        $subselector .= ", $langField~=$q";
-                    }
-                }
-            }
-            $subselectors[] = "($subselector)";
-        }
+    //     foreach ($fields as $field) {
+    //         $subselector = "$field~=$q";
+    //         if ($field instanceof Field && $field->type instanceof FieldtypeLanguage) {
+    //             // Add OR condition for each language
+    //             foreach ($languages as $language) {
+    //                 if ($language->id !== $currentLanguageId) {
+    //                     $langField = $field->name . $language->id;
+    //                     $subselector .= ", $langField~=$q";
+    //                 }
+    //             }
+    //         }
+    //         $subselectors[] = "($subselector)";
+    //     }
         
-        $selector .= ", (" . implode('|', $subselectors) . ")";
-        return $selector;
-    }
+    //     $selector .= ", (" . implode('|', $subselectors) . ")";
+    //     return $selector;
+    // }
 
+    protected function createSelector($q, $category) {
+
+        $selector = "template=" . $category;
+
+        $fields = $this->getUniqueFieldsFromTemplate($category);
+        $selector .= ", " . implode('|', $fields) . "~%=$q";
+
+        return $selector;
+
+    }
 
     // Helper method to extract unique fields from an array of templates
     protected function getUniqueFieldsFromTemplate($category) {
 
         $fields = [];
+        $allowedFieldTypes = [
+            "FieldtypeTextLanguage",
+            "FieldtypeTextareaLanguage",
+            "FieldtypePageTitleLanguage",
+        ];        
 
         // Replace this loop with the logic to extract the fields from the templates
         // For example, if each template has a property "$fields" containing an array of field names:
         $template = $this->templates->get("$category");
         foreach ($template->fields as $field) {
 
-            if (strpos($field->type, "Text") == false && strpos($field->type, "Title") == false) continue;
+            // if (strpos($field->type, "Text") == false && strpos($field->type, "Title") == false) continue;
+            if (!in_array($field->type, $allowedFieldTypes)) { continue; }
             $fields[] = $field->name; // Store the name of the field in the $fields array
         }
 
@@ -319,15 +335,15 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
                     // $html .= layout('search_' . $source, $item);
                     $html .= '<a href="'.$match->url.'" target="_blank">'.$match->title.'</a>';
                     $html .= $this->renderSnippet($match);
-                    if($match->editable()):
-                        $html .= '<p><a href="' . $match->editUrl() . '" target="_blank">Edit this page</a></p>';
-                    endif;
+                    // if($match->editable()):
+                    //     $html .= '<p><a href="' . $match->editUrl() . '" target="_blank">Edit this page</a></p>';
+                    // endif;
                     $html .= '<hr>';
                 }
 
                 $html .= '</ul>';
 
-                if ($total > $this->sublimit && $cat == 0) {
+                if ($total > $this->sublimit) {
                     $html .= '<h3><a class="colorlinks" href="./?q=' . $this->q . '&cat=' . $key . '">mehr…</a></h3>';
                 }
             
@@ -350,9 +366,9 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
                 $html .= $ii . ' - ';
                 $html .= '<a href="'.$match->url.'" target="_blank">'.$match->title.'</a>';
                 $html .= $this->renderSnippet($match);
-                if($match->editable()):
-                    $html .= '<p><a href="' . $match->editUrl() . '" target="_blank">Edit this page</a></p>';
-                endif;
+                // if($match->editable()):
+                //     $html .= '<p><a href="' . $match->editUrl() . '" target="_blank">Edit this page</a></p>';
+                // endif;
                 $html .= '<hr>';
             }
 
@@ -371,8 +387,10 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         $snippets = array();
         $html = '';
         
+        $uniqueFields = $this->getUniqueFieldsFromTemplate($match->template);
+
         // Find snippets for each field where the search term was found
-        foreach ($this->uniqueFields as $field) {
+        foreach ($uniqueFields as $field) {
             $content = strip_tags($match->$field); // Strip HTML tags from the content
             if (stripos($content, $this->q) !== false) {
                 // Find the position of the search term in the content
@@ -388,11 +406,22 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
                 $snippets[$field] = $snippet;
             }
         }
-        
-        // Now, you can include the snippets in your result markup
-        foreach ($snippets as $field => $snippet) {
-            $html .= "<p><strong>$field</strong>...$snippet...</p>";
+
+        // Check if there is at least one snippet
+        if (!empty($snippets)) {
+            // Concatenate all the snippets into one string
+            $combinedSnippet = '... ' . implode(' ... ', $snippets) . ' ...';
+
+            // Wrap the combined snippets with <p></p> tags
+            $html .= '<p>' . $combinedSnippet . '</p>';
+
         }
+        
+        // // Now, you can include the snippets in your result markup
+        // foreach ($snippets as $field => $snippet) {
+        //     // $html .= "<p><strong>$field</strong>...$snippet...</p>";
+        //     $html .= "<p>...$snippet...</p>";
+        // }
 
         return $html;
 

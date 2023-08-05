@@ -44,4 +44,11 @@
             'value' => null, // Default value for the indexedTemplates setting
         ),
 
+        'criteria' => array(
+            'name' => 'criteria',
+            'type' => 'text',
+            'description' => 'The number of search results to display per page (paginated) on the filtered category view.',
+            'required' => false,
+        ),
+
     );
