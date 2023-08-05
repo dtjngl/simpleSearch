@@ -2,14 +2,8 @@
 
 class SimpleSearchConfig extends ModuleConfig {
 
-    public function getDefaults() {
-        return [
-            'your_config_field' => 'default_value',
-            // Add other configuration fields and their default values here
-        ];
-    }
-
     public function getInputfields() {
+
         $inputfields = parent::getInputfields();
 
         // Define your module's configuration fields here
@@ -31,8 +25,9 @@ class SimpleSearchConfig extends ModuleConfig {
         $f->columnWidth = 100;
         $inputfields->add($f);
 
-        $f = $this->modules->get('InputfieldText');
+        $f = $this->modules->get('InputfieldTextarea');
         $f->attr('name', 'search_criteria');
+        // $f->label = $this->_('Search criteria format');
         $f->label = $this->_('Search criteria format');
         $f->description = $this->_('Search criteria format');
         $f->useLanguages = true; // This enables multilingual support

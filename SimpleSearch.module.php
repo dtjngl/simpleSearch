@@ -6,7 +6,12 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
      * Get the module configuration inputfields
      *
      * @return InputfieldWrapper
-     */
+
+    * @param string $key The key to fetch the value for.
+    * @param string $fallbackValue The fallback value if the language-specific value is not found or is an array.
+    * @return string The language-specific value or the fallback value.
+
+    */
 
     public static function getModuleInfo() {
 
@@ -68,13 +73,14 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     
     }
 
-    public function getModuleConfigInputfields()
-    {
+    public function getModuleConfigInputfields() {
+
         $inputfields = new InputfieldWrapper();
 
         return $inputfields;
+
     }
-    
+
     protected function getDefaultIndexedTemplates() {
         // Return an array of template names you want to index by default.
         // For example, to index all pages from the "project" and "article" templates:
@@ -245,19 +251,26 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     }
     
 
+    // private function getLanguageValue($key, $fallbackValue) {
+    //     $languageID = $this->user->language->id;
+    //     $languageValue = $this->modules->getConfig("{$key}_{$languageID}");
+        
+    //     if (is_array($languageValue) || empty($languageValue)) {
+    //         return $fallbackValue;
+    //     }
+        
+    //     return $languageValue;
+    // }
+        
+
     public function renderCriteriaMarkup() {
+
+        $lang = $this->user->language;
+        // echo $this->config->search_criteria->getLanguageValue($lang);
+        
         if (!$this->q) return;
     
-        // Get the language-specific search criteria template from the modules database table
-        $language = $this->user->language->name;
-        $searchCriteriaTemplate = $this->modules->getConfig("search_criteria_{$language}");
-    
-        // If the language-specific value is not found, fall back to the default value
-        if (empty($searchCriteriaTemplate)) {
-            $searchCriteriaTemplate = $this->search_criteria;
-        }
-    
-        $html = $searchCriteriaTemplate;
+        $html = $this->search_criteria;
     
         $categoryLabel = $this->labels[$this->cat];
         $searchQuery = $this->q;
@@ -266,8 +279,10 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         $html = str_replace('{q}', $searchQuery, $html);
     
         return $html;
+
     }
-        
+    
+    
 
     // ConfigurableModule.php
 
