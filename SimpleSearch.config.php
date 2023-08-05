@@ -1,54 +1,63 @@
 <?php namespace ProcessWire;
 
-    // Indexed templates settings
-    $templates = $this->wire('templates');
-    $templateOptions = array();
+class SimpleSearchConfig extends ModuleConfig {
 
-    foreach ($templates as $template) {
-        $templateOptions[$template->name] = $template->name;
+    public function getDefaults() {
+        return [
+            'your_config_field' => 'default_value',
+            // Add other configuration fields and their default values here
+        ];
     }
 
-    $config = array(
+    public function getInputfields() {
+        $inputfields = parent::getInputfields();
 
-        'sublimit' => array(
-            'name' => 'sublimit',
-            'type' => 'integer',
-            'label' => __('Subcategory Search Limit'),
-            'description' => __('The number of search results to display per category on the search overview (all results)'),
-            // 'notes' => __('Enter 0 for no limit.'),
-            'required' => true,
-            'value' => 10,
-        ),
+        // Define your module's configuration fields here
+        // For example, you can add a text inputfield with language support:
 
-        'limit' => array(
-            'name' => 'limit',
-            'type' => 'integer',
-            'label' => __('Default Search Limit'),
-            'description' => __('The number of search results to display per page (paginated) on the filtered category view.'),
-            // 'notes' => __('Enter 0 for no limit.'),
-            'required' => true,
-            'value' => 20,
-        ),
+        $f = $this->modules->get('InputfieldInteger');
+        $f->attr('name', 'limit');
+        $f->label = $this->_('Limit for category detail view');
+        $f->description = $this->_('Limit for category detail view');
+        $f->useLanguages = false; // This enables multilingual support
+        $f->columnWidth = 100;
+        $inputfields->add($f);
 
-        'indexedTemplates' => array(
-            'name' => 'indexed_templates',
-            'type' => 'asmSelect',
-            'label' => __('Indexed Templates'),
-            'description' => __('Select the templates whose pages should be indexed for search.'),
-            'notes' => __('Only pages from selected templates will be included in search results.'),
-            'options' => $templateOptions,
-            // 'options' => array('la', 'le', 'lu'),
-            'tags' => true,
-            'collapsed' => 'collapsed',
-            'required' => false, // Set the field as not required
-            'value' => null, // Default value for the indexedTemplates setting
-        ),
+        $f = $this->modules->get('InputfieldInteger');
+        $f->attr('name', 'sublimit');
+        $f->label = $this->_('Limit for categories overview ');
+        $f->description = $this->_('Limit for categories overview');
+        $f->useLanguages = false; // This enables multilingual support
+        $f->columnWidth = 100;
+        $inputfields->add($f);
 
-        'criteria' => array(
-            'name' => 'criteria',
-            'type' => 'text',
-            'description' => 'The number of search results to display per page (paginated) on the filtered category view.',
-            'required' => false,
-        ),
+        $f = $this->modules->get('InputfieldText');
+        $f->attr('name', 'search_criteria');
+        $f->label = $this->_('Search criteria format');
+        $f->description = $this->_('Search criteria format');
+        $f->useLanguages = true; // This enables multilingual support
+        $f->columnWidth = 100;
+        $inputfields->add($f);
 
-    );
+        $f = $this->modules->get('InputfieldText');
+        $f->attr('name', 'search_overview');
+        $f->label = $this->_('Search overview format');
+        $f->description = $this->_('Search overview format');
+        $f->useLanguages = true; // This enables multilingual support
+        $f->columnWidth = 100;
+        $inputfields->add($f);
+
+        $f = $this->modules->get('InputfieldText');
+        $f->attr('name', 'pagination_string');
+        $f->label = $this->_('Pagination string format');
+        $f->description = $this->_('Pagination string format');
+        $f->useLanguages = true; // This enables multilingual support
+        $f->columnWidth = 100;
+        $inputfields->add($f);
+
+        // Add other inputfields as needed
+
+        return $inputfields;
+    }
+
+}

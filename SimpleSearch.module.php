@@ -2,7 +2,11 @@
 
 class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
-    // protected $page;
+    /**
+     * Get the module configuration inputfields
+     *
+     * @return InputfieldWrapper
+     */
 
     public static function getModuleInfo() {
 
@@ -10,8 +14,8 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
             'title' => 'Simple Search',
             'version' => '1.0.0',
             'summary' => 'A simple search module for ProcessWire.',
-            // 'autoload' => true,
-            // 'singular' => true,
+            'autoload' => true,
+            'singular' => true,
             'icon' => 'search',
             'author' => 'FRE:D',
             'installs' => [], // Optional array of module names that this module should install, if any
@@ -46,7 +50,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         $this->inputSanitized = $this->sanitizeInput();
 
-        $this->start = $this->limit * ($this->input->pageNum() - 1);
+        $this->start = (int)$this->limit * ($this->input->pageNum() - 1);
 
         // Explicitly load the MarkupPagerNav module
         $this->pager = $this->modules->get('MarkupPagerNav');
@@ -64,8 +68,11 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     
     }
 
-    static public function getModuleConfigInputfields(array $data)
+    public function getModuleConfigInputfields()
     {
+        $inputfields = new InputfieldWrapper();
+
+        return $inputfields;
     }
     
     protected function getDefaultIndexedTemplates() {
@@ -76,7 +83,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     protected function updateStart() {
 
-        $start = $this->limit * ($this->input->pageNum() - 1);
+        $start = (int)$this->limit * ($this->input->pageNum() - 1);
         return $start;
     
     }
@@ -239,31 +246,43 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     
 
     public function renderCriteriaMarkup() {
-
         if (!$this->q) return;
-
-        $html = '';
-
-        if (isset($this->cat) && $this->cat > 0 ) {
-            $html .= "in: ";
-            $html .= $this->indexedCategories[$this->cat];    
-        } else {
-            $html .= "in: $this->allResultsLabel";
+    
+        // Get the language-specific search criteria template from the modules database table
+        $language = $this->user->language->name;
+        $searchCriteriaTemplate = $this->modules->getConfig("search_criteria_{$language}");
+    
+        // If the language-specific value is not found, fall back to the default value
+        if (empty($searchCriteriaTemplate)) {
+            $searchCriteriaTemplate = $this->search_criteria;
         }
-
-        $html .= ", ";
-        $html .= "Suchbegriff: ";
-        $html .= $this->q;
-        
-        if (isset($this->sort) && $this->sort != '') {
-            $html .= ", ";
-            $html .= "Sortierung: ";
-            $html .= $this->sort;
-        }
-
+    
+        $html = $searchCriteriaTemplate;
+    
+        $categoryLabel = $this->labels[$this->cat];
+        $searchQuery = $this->q;
+    
+        $html = str_replace('{template}', $categoryLabel, $html);
+        $html = str_replace('{q}', $searchQuery, $html);
+    
         return $html;
-
     }
+        
+
+    // ConfigurableModule.php
+
+    // public function renderCriteriaMarkup() {
+        // Get the user-configured search criteria template for the current language
+        // $searchCriteriaTemplate = $this->config->search_criteria;
+
+        // Replace {template} and {q} with appropriate dynamic values
+        // $templateName = $this->template->name;
+        // $searchQuery = $this->sanitizer->entities($this->input->get('q', 'text'));
+
+
+        // return $markup;
+    // }
+
 
     public function renderOverviewMarkup() {
 
@@ -356,7 +375,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
             $matches = $this->results->eq($cat);
             $start = $this->updateStart();
-            $limit = $this->limit;
+            $limit = (int)$this->limit;
             $pagMatches = $matches->find("start=$start, limit=$limit");
 
             foreach ($pagMatches as $i => $match) {
@@ -441,7 +460,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
             $matches = $this->results->eq($cat);
             $start = $this->updateStart();
-            $limit = $this->limit;
+            $limit = (int)$this->limit;
             $pagMatches = $matches->find("start=$start, limit=$limit");
 
             if ($pagMatches->count) {
@@ -510,7 +529,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
             // Create a new WireArray containing only the paginated matches
             $matches = $this->results->eq($this->cat);
             $start = $this->updateStart();
-            $limit = $this->limit;
+            $limit = (int)$this->limit;
             $matches->setStart($start);
             $matches->setLimit($limit);
         
