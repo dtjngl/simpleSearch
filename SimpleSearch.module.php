@@ -25,10 +25,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
             'author' => 'FRE:D',
             'installs' => [], // Optional array of module names that this module should install, if any
             'requires' => [], // Optional array of module names that are required for this module to run, if any
-            'settings' => [
-                'limit' => 20, // Default value for the limit setting
-                'sublimit' => 10, // Default value for the sublimit setting
-            ],
         );
 
     }
@@ -38,13 +34,15 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         foreach ($simpleSearchSettings as $key => $value) {
             $this->$key = $value;
         }
+        // echo '<pre>';
+        // print_r($simpleSearchSettings);
+        // echo '</pre>';
     }
 
     public function init() {
 
         // Define the pages to search
         // $this->indexedCategories = ["", "project", "article"];
-        $this->allResultsLabel = __("Alle Inhalte");
         
         $this->q = '';
         $this->cat = 0;
@@ -119,8 +117,11 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     public function handleSearch() {
 
         // Check if the search form was submitted (i.e., input variable exists)
+
         if ($this->q) {
 
+            $this->allResultsLabel = $this->getLanguageString('all_entries_label');
+        
             $indexedCategories = $this->indexedCategories;
             $allTotals = 0;
 
@@ -251,26 +252,23 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     }
     
 
-    // private function getLanguageValue($key, $fallbackValue) {
-    //     $languageID = $this->user->language->id;
-    //     $languageValue = $this->modules->getConfig("{$key}_{$languageID}");
-        
-    //     if (is_array($languageValue) || empty($languageValue)) {
-    //         return $fallbackValue;
-    //     }
-        
-    //     return $languageValue;
-    // }
-        
+    private function getLanguageString(string $key) {
+        $language = $this->user->language;
+        if ($language->name !== 'default') {
+            $string = $key.'__'.$language->id;
+            return $this->$string;
+        } 
+        return $this->$key;
+    }
+            
 
     public function renderCriteriaMarkup() {
 
-        $lang = $this->user->language;
-        // echo $this->config->search_criteria->getLanguageValue($lang);
-        
+        $searchCriteriaFormat = $this->getLanguageString('search_criteria');
+    
         if (!$this->q) return;
     
-        $html = $this->search_criteria;
+        $html = $searchCriteriaFormat;
     
         $categoryLabel = $this->labels[$this->cat];
         $searchQuery = $this->q;
@@ -281,22 +279,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         return $html;
 
     }
-    
-    
-
-    // ConfigurableModule.php
-
-    // public function renderCriteriaMarkup() {
-        // Get the user-configured search criteria template for the current language
-        // $searchCriteriaTemplate = $this->config->search_criteria;
-
-        // Replace {template} and {q} with appropriate dynamic values
-        // $templateName = $this->template->name;
-        // $searchQuery = $this->sanitizer->entities($this->input->get('q', 'text'));
-
-
-        // return $markup;
-    // }
 
 
     public function renderOverviewMarkup() {
@@ -465,6 +447,8 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         if (!$this->q) return;
 
+        $pagination_string_entries = $this->getLanguageString('pagination_string_entries');
+
         // pagination string :D
 
         $cat = $this->cat;
@@ -480,8 +464,8 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
             if ($pagMatches->count) {
                 $html .= '<span class="grey">' . $pagMatches->getPaginationString(array(
-                    'label' => 'Einträge',
-                    'zeroLabel' => '0 Einträge', // 3.0.127+ only
+                    'label' => $pagination_string_entries,
+                    'zeroLabel' => '0 '.$pagination_string_entries, // 3.0.127+ only
                     'usePageNum' => false,
                     'count' => $pagMatches->count(),
                     'start' => $pagMatches->getStart(),
