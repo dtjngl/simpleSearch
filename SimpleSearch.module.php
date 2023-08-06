@@ -29,6 +29,8 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     }
 
+    const CUSTOM_TEMPLATES_PATH = __DIR__ . '/CustomTemplates/';
+
     public function __construct() {
         $simpleSearchSettings = wire('modules')->getConfig($this);
         foreach ($simpleSearchSettings as $key => $value) {
@@ -58,16 +60,17 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         // Explicitly load the MarkupPagerNav module
         $this->pager = $this->modules->get('MarkupPagerNav');
         
+        $this->setIndexedcategories();
 
-        // Get the indexed templates from the module configuration
-        $indexedTemplates = $this->config->indexedTemplates;
+        // // Get the indexed templates from the module configuration
+        // $indexedTemplates = $this->config->indexedTemplates;
 
-        // If no indexed templates are selected, fallback to indexing all templates
-        if (empty($indexedTemplates)) {
-            $indexedTemplates = $this->getDefaultIndexedTemplates();
-        }
+        // // If no indexed templates are selected, fallback to indexing all templates
+        // if (empty($indexedTemplates)) {
+        //     $indexedTemplates = $this->getDefaultIndexedTemplates();
+        // }
 
-        $this->indexedCategories = $indexedTemplates;
+        // $this->indexedCategories = $indexedTemplates;
     
     }
 
@@ -79,10 +82,21 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     }
 
-    protected function getDefaultIndexedTemplates() {
+    protected function setIndexedcategories() {
         // Return an array of template names you want to index by default.
         // For example, to index all pages from the "project" and "article" templates:
-        return ['', 'project', 'article'];
+        // return ['', 'project', 'article'];
+
+        $indexedCategories = new WireArray;
+
+        foreach ($this->indexed_templates as $temp) {
+            $indexedCategories->add($temp);
+        }
+
+        $indexedCategories->prepend('');
+
+        $this->indexedCategories = $indexedCategories;
+
     }
 
     protected function updateStart() {
@@ -120,9 +134,13 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         if ($this->q) {
 
-            $this->allResultsLabel = $this->getLanguageString('all_entries_label');
+            $fieldNameString = $this->getLanguageString2_('all_entries_label');
+            $this->allResultsLabel = $this->$fieldNameString;
         
             $indexedCategories = $this->indexedCategories;
+
+            // print_r($indexedCategories);
+            
             $allTotals = 0;
 
             foreach ($indexedCategories as $cat => $category) {
@@ -143,7 +161,11 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
                 $this->results->set($cat, $filteredMatches);
                 $this->totals->set($cat, $total);
-                $this->labels->set($cat, $this->templates->get("$category")->label);                
+
+                $string = $this->getLanguageString('label');
+                $categoryLabel = $this->templates->get($category)->$string;
+
+                $this->labels->set($cat, $categoryLabel);
 
                 $allTotals += $total;
 
@@ -219,14 +241,39 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     protected function createSelector($q, $category) {
 
         $selector = "template=" . $category;
+        $search_operator = $this->search_operator;
 
         $fields = $this->getUniqueFieldsFromTemplate($category);
-        $selector .= ", " . implode('|', $fields) . "~%=$q";
+        $selector .= ", " . implode('|', $fields) . "$search_operator.$q";
 
         return $selector;
 
     }
 
+    public function renderMarkupForSearchCategory($match, $source) {
+        $functionName = "searchMarkup_{$source}";
+
+        // Get the correct path to the templates folder
+        $templatesPath = wire('config')->paths->templates;
+
+        // Add a trailing slash if it's missing from the templates path
+        $templatesPath = rtrim($templatesPath, '/') . '/';
+    
+        $templateFile = $templatesPath . "search_templates/search_markup_functions.php";
+        if (file_exists($templateFile)) {
+            include_once $templateFile;
+    
+            if (function_exists($functionName)) {
+                // Call the dynamic function for the specific search category
+                return call_user_func($functionName, $match);
+            }
+        }
+    
+        // If the function doesn't exist or the template file isn't found, fall back to the default renderSnippet function
+        return $this->renderSnippet($match);
+    }
+    
+                
     // Helper method to extract unique fields from an array of templates
     protected function getUniqueFieldsFromTemplate($category) {
 
@@ -255,25 +302,35 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     private function getLanguageString(string $key) {
         $language = $this->user->language;
         if ($language->name !== 'default') {
-            $string = $key.'__'.$language->id;
-            return $this->$string;
+            $string = $key.$language->id;
+            return $string;
         } 
-        return $this->$key;
+        return $key;
+    }
+
+
+    private function getLanguageString2_(string $key) {
+        $language = $this->user->language;
+        if ($language->name !== 'default') {
+            $string = $key.'__'.$language->id;
+            return $string;
+        } 
+        return $key;
     }
             
 
     public function renderCriteriaMarkup() {
 
-        $searchCriteriaFormat = $this->getLanguageString('search_criteria');
+        $fieldNameString = $this->getLanguageString2_('search_criteria');
+        $searchCriteriaFormat = $this->$fieldNameString;
     
         if (!$this->q) return;
     
         $html = $searchCriteriaFormat;
     
-        $categoryLabel = $this->labels[$this->cat];
         $searchQuery = $this->q;
     
-        $html = str_replace('{template}', $categoryLabel, $html);
+        $html = str_replace('{template}', $this->labels->eq($this->cat), $html);
         $html = str_replace('{q}', $searchQuery, $html);
     
         return $html;
@@ -304,6 +361,11 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         foreach ($this->indexedCategories as $key => $content) {
             if ($key == 0) continue;
+            $fieldNameString = $this->getLanguageString('label');
+            // echo '<pre>';
+            // print_r($this->templates->get($content)->$string);
+            // echo '</pre>';
+
             $total = $this->totals->eq($key);
             if ($total < 1) {
                 $html .= '<strong class="grey">' . $this->labels->eq($key) . ' (' . $total . '), </strong>';
@@ -311,6 +373,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
                 if ($cat == $key) {
                     $html .= '<strong>' . $this->labels->eq($key) . ' (' . $total . '), </strong>';
                 } else {
+                    // $html .= '<a class="colorlinks" href="./?q=' . $this->q . '&cat=' . $key . '">' . $this->labels->eq($key) . ' (' . $total . '), </a>';
                     $html .= '<a class="colorlinks" href="./?q=' . $this->q . '&cat=' . $key . '">' . $this->labels->eq($key) . ' (' . $total . '), </a>';
                 }
             }
@@ -347,10 +410,9 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
                 $matches->filter("limit=$limit");
 
                 foreach ($matches as $i => $match) {
-                    $source = $this->indexedCategories[$cat];
                     // $html .= layout('search_' . $source, $item);
-                    $html .= '<a href="'.$match->url.'" target="_blank">'.$match->title.'</a>';
-                    $html .= $this->renderSnippet($match);
+                    $source = $match->template->name;
+                    $html .= $this->renderMarkupForSearchCategory($match, $source);
                     // if($match->editable()):
                     //     $html .= '<p><a href="' . $match->editUrl() . '" target="_blank">Edit this page</a></p>';
                     // endif;
@@ -380,8 +442,10 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
                 // $html .= layout('search_' . $source, $item);
                 $ii = $i + 1;
                 $html .= $ii . ' - ';
-                $html .= '<a href="'.$match->url.'" target="_blank">'.$match->title.'</a>';
-                $html .= $this->renderSnippet($match);
+                // $html .= '<a href="'.$match->url.'" target="_blank">'.$match->title.'</a>';
+                // $html .= $this->renderSnippet($match);
+                $source = $match->template->name;
+                $html .= $this->renderMarkupForSearchCategory($match, $source);
                 // if($match->editable()):
                 //     $html .= '<p><a href="' . $match->editUrl() . '" target="_blank">Edit this page</a></p>';
                 // endif;
@@ -398,12 +462,14 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     }
 
     protected function renderSnippet($match) {
-
+        
         // Create an array to store snippets for each field
         $snippets = array();
         $html = '';
         
         $uniqueFields = $this->getUniqueFieldsFromTemplate($match->template);
+
+        $html .= '<a href="'.$match->url.'" target="_blank"><h3>'.$match->title.'</h3></a>';
 
         // Find snippets for each field where the search term was found
         foreach ($uniqueFields as $field) {
@@ -447,7 +513,10 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         if (!$this->q) return;
 
-        $pagination_string_entries = $this->getLanguageString('pagination_string_entries');
+        $fieldNameString = $this->getLanguageString2_('pagination_string_entries');
+        // echo '<h1>'.$fieldNameString.'</h1>';
+        // print_r($this->$fieldNameString);
+        $pagination_string_entries = $this->$fieldNameString;
 
         // pagination string :D
 

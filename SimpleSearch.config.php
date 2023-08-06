@@ -1,5 +1,16 @@
 <?php namespace ProcessWire;
 
+// Get the list of all templates visible to the guest user
+$allTemplates = $this->templates->find('roles=, label!=');
+
+// Create an empty array to hold the options
+$templateOptions = [];
+
+// Loop through each template and add it to the options array
+foreach ($allTemplates as $template) {
+    $templateOptions[$template->id] = $template->label;
+}
+
 $config = array(
       'limit' => array(
         'label' => 'Limit',
@@ -13,10 +24,11 @@ $config = array(
         'value' => '',
         'columnWidth' => 50,
       ),
-      'sender_name' => array(
-        'label' => 'Sender Name',
-        'type' => 'text',
-        'value' => '',
+      'search_operator' => array(
+        'label' => 'Search Operator',
+        'type' => 'InputfieldText',
+        'value' => '~%=',
+        'description' => $this->_('find all available operands on the PW documentation page https://processwire.com/docs/selectors/#operators'),
         'columnWidth' => 50,
       ),
       'search_criteria' => array(
@@ -40,7 +52,17 @@ $config = array(
         'columnWidth' => 50,
         'useLanguages' => true
       ),
-  );
+      'indexed_templates' => [
+        'name' => 'indexed_templates',
+        'type' => 'InputfieldAsmSelect',
+        'label' => $this->_('Indexed Templates'),
+        'description' => $this->_('Select templates to be indexed by the SimpleSearch module.'),
+        'notes' => $this->_('You can select multiple templates.'),
+        'required' => false,
+        'options' => $templateOptions,
+        'columnWidth' => 50, // Adjust the column width as needed
+    ],
+);
 
 
 // class SimpleSearchConfig extends ModuleConfig {
