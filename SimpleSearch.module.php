@@ -29,18 +29,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     }
 
-    const CUSTOM_TEMPLATES_PATH = __DIR__ . '/CustomTemplates/';
-
-    public function __construct() {
-        $simpleSearchSettings = wire('modules')->getConfig($this);
-        foreach ($simpleSearchSettings as $key => $value) {
-            $this->$key = $value;
-        }
-        // echo '<pre>';
-        // print_r($simpleSearchSettings);
-        // echo '</pre>';
-    }
-
     public function init() {
 
         // Define the pages to search
@@ -72,15 +60,95 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         // $this->indexedCategories = $indexedTemplates;
     
-    }
-
-    public function getModuleConfigInputfields() {
-
-        $inputfields = new InputfieldWrapper();
-
-        return $inputfields;
 
     }
+
+    public function ready() {
+
+        $this->addHookAfter("ProcessTemplate::buildEditForm", $this, 'addSimpleSearchCategoryField');
+
+        // Hook to save "seo_rules" field value when the template is saved
+        $this->addHookBefore("ProcessTemplate::executeSave", $this, 'saveSimpleSearchCategoryFieldValue');
+
+    }
+
+    public function __uninstall() {
+        // // Loop through all the fields created by your module and delete them
+        // foreach ($this->fields as $field) {
+        //     if ($field->flags && Field::flagSystem) continue; // Skip system fields
+        //     if ($field->className === 'FieldtypeSimpleSearch') {
+        //         $this->fields->delete($field);
+        //     }
+        // }
+    }
+
+    public function __construct() {
+    
+        $simpleSearchSettings = wire('modules')->getConfig($this);
+        foreach ($simpleSearchSettings as $key => $value) {
+            $this->$key = $value;
+        }
+
+        // Store the path of the custom markup functions file
+        $this->customMarkupFilePath = $this->config->paths->templates . $this->custom_search_results_markup;
+
+        if (!empty($this->customMarkupFilePath) && file_exists($this->customMarkupFilePath)) {
+            require_once($this->customMarkupFilePath);
+        }
+
+        // Store the path of the default markup functions file
+        $this->defaultMarkupFilePath = __DIR__ . '/_default_markup_functions.php';
+
+        // Include the default markup functions file to access renderDefaultMarkup function
+        require_once($this->defaultMarkupFilePath);
+
+    }
+
+
+    public function addSimpleSearchCategoryField(HookEvent $event) {
+        $languages = $this->wire('languages');
+        $template = $event->arguments[0];
+        $form = $event->return;
+    
+        $field = $this->modules->get("InputfieldText");
+        $field->attr('id+name', 'simplesearch_category'); 
+        $field->attr('value', $template->simplesearch_category);
+        if ($languages) {
+            $field->useLanguages = true;
+            foreach ($languages as $language) {
+                $field->set('value' . $language->id, $template->get("simplesearch_category__{$language->id}"));
+            }
+        }
+        $field->label = $this->_('SimpleSearch Category');
+        $field->description = $this->_('Enter the SimpleSearch category label for this template. If empty, pages using this template will NOT be indexed.');
+        $field->notes = $this->_('tipp: use plural');
+
+        // $form->insertAfter($field, $form->tags);
+
+        // Find the "label" field in the form
+        $labelField = $form->getChildByName('templateLabel');
+
+        // Insert the "simplesearch_category" field after the "label" field
+        $form->insertAfter($field, $labelField);
+
+        // $this->message($form->simplesearch_category);
+        
+        $event->return = $form;
+    }
+    
+
+    public function saveSimpleSearchCategoryFieldValue(HookEvent $event) {
+        $template = $this->templates->get($this->input->post->id);
+        $template->set('simplesearch_category', $this->input->post->simplesearch_category);
+    
+        $languages = $this->wire('languages');
+        if ($languages) {
+            foreach ($languages as $language) {
+                $template->set("simplesearch_category__{$language->id}", $this->input->post->{"simplesearch_category__$language->id"});
+            }
+        }
+    }
+        
 
     protected function setIndexedcategories() {
         // Return an array of template names you want to index by default.
@@ -89,7 +157,8 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         $indexedCategories = new WireArray;
 
-        foreach ($this->indexed_templates as $temp) {
+        foreach ($this->templates as $temp) {
+            if ($temp->simplesearch_category == '') continue;
             $indexedCategories->add($temp);
         }
 
@@ -99,12 +168,28 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     }
 
+
+    // public function getModuleConfigInputfields() {
+
+    //     $inputfields = new InputfieldWrapper();
+
+    //     return $inputfields;
+
+    // }
+
+
+
+
+
+
+
     protected function updateStart() {
 
         $start = (int)$this->limit * ($this->input->pageNum() - 1);
         return $start;
     
     }
+
 
     protected function sanitizeInput() {
 
@@ -134,12 +219,10 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         if ($this->q) {
 
-            $fieldNameString = $this->getLanguageString2_('all_entries_label');
+            $fieldNameString = $this->getLanguageString('all_entries_label', '__');
             $this->allResultsLabel = $this->$fieldNameString;
         
             $indexedCategories = $this->indexedCategories;
-
-            // print_r($indexedCategories);
             
             $allTotals = 0;
 
@@ -162,7 +245,8 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
                 $this->results->set($cat, $filteredMatches);
                 $this->totals->set($cat, $total);
 
-                $string = $this->getLanguageString('label');
+                // $string = $this->getLanguageString('label');
+                $string = $this->getLanguageString('simplesearch_category', '__');
                 $categoryLabel = $this->templates->get($category)->$string;
 
                 $this->labels->set($cat, $categoryLabel);
@@ -183,61 +267,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     }
     
         
-    // protected function filterCurrentLanguage($items, $q) {
-
-    //     $filteredItems = new PageArray;
-
-    //     foreach ($items as $item) {
-    //         $fields = $this->getUniqueFieldsFromTemplate($item->template);
-    //         $foundInCurrentLanguage = false;
-
-    //         foreach ($fields as $field) {
-    //             $fieldValue = $item->getLanguageValue($language, $field);
-    //             if (stripos($fieldValue, $q) !== false) {
-    //                 // echo '<h1>'.strlen($fieldValue).'</h1>';
-    //                 echo '<h1>'.stripos($fieldValue, $q) . ' – ' . $field . ' – ' . $item->template . '</h1>';    
-    //                 $foundInCurrentLanguage = true;
-    //                 break;
-    //             } else {
-    //                 // echo '<h1>'.stripos($fieldValue, $q).'</h1>';
-    //             }
-    //         }
-    
-
-    //         if ($foundInCurrentLanguage == true) {
-    //             $filteredItems->add($item);
-    //         }
-    //     }
-    
-    //     return $filteredItems;
-    // }
-    
-
-    // protected function createSelector($q, $category) {
-    //     $selector = "template=$category";
-    //     $fields = $this->getUniqueFieldsFromTemplate($category);
-    //     $this->uniqueFields = $fields;
-    
-    //     $subselectors = array();
-
-    //     foreach ($fields as $field) {
-    //         $subselector = "$field~=$q";
-    //         if ($field instanceof Field && $field->type instanceof FieldtypeLanguage) {
-    //             // Add OR condition for each language
-    //             foreach ($languages as $language) {
-    //                 if ($language->id !== $currentLanguageId) {
-    //                     $langField = $field->name . $language->id;
-    //                     $subselector .= ", $langField~=$q";
-    //                 }
-    //             }
-    //         }
-    //         $subselectors[] = "($subselector)";
-    //     }
-        
-    //     $selector .= ", (" . implode('|', $subselectors) . ")";
-    //     return $selector;
-    // }
-
     protected function createSelector($q, $category) {
 
         $selector = "template=" . $category;
@@ -250,30 +279,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     }
 
-    public function renderMarkupForSearchCategory($match, $source) {
-        $functionName = "searchMarkup_{$source}";
 
-        // Get the correct path to the templates folder
-        $templatesPath = wire('config')->paths->templates;
-
-        // Add a trailing slash if it's missing from the templates path
-        $templatesPath = rtrim($templatesPath, '/') . '/';
-    
-        $templateFile = $templatesPath . "search_templates/search_markup_functions.php";
-        if (file_exists($templateFile)) {
-            include_once $templateFile;
-    
-            if (function_exists($functionName)) {
-                // Call the dynamic function for the specific search category
-                return call_user_func($functionName, $match);
-            }
-        }
-    
-        // If the function doesn't exist or the template file isn't found, fall back to the default renderSnippet function
-        return $this->renderSnippet($match);
-    }
-    
-                
     // Helper method to extract unique fields from an array of templates
     protected function getUniqueFieldsFromTemplate($category) {
 
@@ -297,22 +303,92 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         return array_unique($fields);
 
     }
-    
 
-    private function getLanguageString(string $key) {
-        $language = $this->user->language;
-        if ($language->name !== 'default') {
-            $string = $key.$language->id;
-            return $string;
-        } 
-        return $key;
+
+    public function renderMarkupForSearchCategory($match, $source) {
+
+        $functionName = "renderSearchMarkup_{$source}";
+
+        if (function_exists($functionName)) {
+            return call_user_func($functionName, $match);
+        }
+
+        return $this->renderDefaultMarkup($match);
+
+
     }
 
 
-    private function getLanguageString2_(string $key) {
+    protected function renderDefaultMarkup($match) {
+
+        $html = '';
+        
+        $html .= '<a href="'.$match->url.'" target="_blank"><h3>'.$match->title.'</h3></a>';
+    
+        $html .= $this->renderSnippet($match);
+
+        return $html;
+    
+    }
+
+
+    public function renderSnippet($match, $start=25, $end=25) {
+
+        $html = '';
+
+        // Create an array to store snippets for each field
+        $snippets = array();
+
+        $uniqueFields = $this->getUniqueFieldsFromTemplate($match->template);
+
+
+        // Find snippets for each field where the search term was found
+        foreach ($uniqueFields as $field) {
+            $content = strip_tags($match->$field); // Strip HTML tags from the content
+            if (stripos($content, $this->q) !== false) {
+                // Find the position of the search term in the content
+                $position = stripos($content, $this->q);
+                // Extract a snippet of text around the matched term
+                $startPos = max(0, $position - $start); // Get 50 characters before the matched term
+                $endPos = min(strlen($content), $position + $end); // Get 50 characters after the matched term
+                
+                // Highlight the search term within the snippet using <strong> tags
+                $snippet = substr($content, $startPos, $position - $startPos) . "<strong>" . substr($content, $position, strlen($this->q)) . "</strong>" . substr($content, $position + strlen($this->q), $endPos - ($position + strlen($this->q)));
+                
+                // Add the snippet to the snippets array
+                $snippets[$field] = $snippet;
+            }
+        }
+
+        // Check if there is at least one snippet
+        if (!empty($snippets)) {
+            // Concatenate all the snippets into one string
+            $combinedSnippet = '... ' . implode(' ... ', $snippets) . ' ...';
+
+            // Wrap the combined snippets with <p></p> tags
+            $html .= '<p>' . $combinedSnippet . '</p>';
+
+        }
+
+        return $html;
+    
+    }
+
+
+    // private function getLanguageString(string $key) {
+    //     $language = $this->user->language;
+    //     if ($language->name !== 'default') {
+    //         $string = $key.$language->id;
+    //         return $string;
+    //     } 
+    //     return $key;
+    // }
+
+
+    private function getLanguageString(string $key, string $x='') {
         $language = $this->user->language;
         if ($language->name !== 'default') {
-            $string = $key.'__'.$language->id;
+            $string = $key.$x.$language->id;
             return $string;
         } 
         return $key;
@@ -321,7 +397,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     public function renderCriteriaMarkup() {
 
-        $fieldNameString = $this->getLanguageString2_('search_criteria');
+        $fieldNameString = $this->getLanguageString('search_criteria', '__');
         $searchCriteriaFormat = $this->$fieldNameString;
     
         if (!$this->q) return;
@@ -361,7 +437,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         foreach ($this->indexedCategories as $key => $content) {
             if ($key == 0) continue;
-            $fieldNameString = $this->getLanguageString('label');
             // echo '<pre>';
             // print_r($this->templates->get($content)->$string);
             // echo '</pre>';
@@ -384,6 +459,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         return $html;
 
     }
+
 
     public function renderResultsMarkup() {
 
@@ -429,7 +505,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
             }
         } else {
             $total = $this->totals->eq($cat); 
-            $html .= '<h3><strong>' . $this->templates->get($this->indexedCategories[$cat])->label . ' (' . $total . ')</strong></h3>';
+            $html .= '<h3><strong>' . $this->labels->eq($cat) . ' (' . $total . ')</strong></h3>';
             $html .= '<ul class="nostyle">';
 
             $matches = $this->results->eq($cat);
@@ -438,12 +514,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
             $pagMatches = $matches->find("start=$start, limit=$limit");
 
             foreach ($pagMatches as $i => $match) {
-                // $source = $this->templates->get($this->indexedCategories[$cat])->label;
-                // $html .= layout('search_' . $source, $item);
-                $ii = $i + 1;
-                $html .= $ii . ' - ';
-                // $html .= '<a href="'.$match->url.'" target="_blank">'.$match->title.'</a>';
-                // $html .= $this->renderSnippet($match);
                 $source = $match->template->name;
                 $html .= $this->renderMarkupForSearchCategory($match, $source);
                 // if($match->editable()):
@@ -461,59 +531,12 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     }
 
-    protected function renderSnippet($match) {
-        
-        // Create an array to store snippets for each field
-        $snippets = array();
-        $html = '';
-        
-        $uniqueFields = $this->getUniqueFieldsFromTemplate($match->template);
-
-        $html .= '<a href="'.$match->url.'" target="_blank"><h3>'.$match->title.'</h3></a>';
-
-        // Find snippets for each field where the search term was found
-        foreach ($uniqueFields as $field) {
-            $content = strip_tags($match->$field); // Strip HTML tags from the content
-            if (stripos($content, $this->q) !== false) {
-                // Find the position of the search term in the content
-                $position = stripos($content, $this->q);
-                // Extract a snippet of text around the matched term
-                $startPos = max(0, $position - 25); // Get 50 characters before the matched term
-                $endPos = min(strlen($content), $position + 25); // Get 50 characters after the matched term
-                
-                // Highlight the search term within the snippet using <strong> tags
-                $snippet = substr($content, $startPos, $position - $startPos) . "<strong>" . substr($content, $position, strlen($this->q)) . "</strong>" . substr($content, $position + strlen($this->q), $endPos - ($position + strlen($this->q)));
-                
-                // Add the snippet to the snippets array
-                $snippets[$field] = $snippet;
-            }
-        }
-
-        // Check if there is at least one snippet
-        if (!empty($snippets)) {
-            // Concatenate all the snippets into one string
-            $combinedSnippet = '... ' . implode(' ... ', $snippets) . ' ...';
-
-            // Wrap the combined snippets with <p></p> tags
-            $html .= '<p>' . $combinedSnippet . '</p>';
-
-        }
-        
-        // // Now, you can include the snippets in your result markup
-        // foreach ($snippets as $field => $snippet) {
-        //     // $html .= "<p><strong>$field</strong>...$snippet...</p>";
-        //     $html .= "<p>...$snippet...</p>";
-        // }
-
-        return $html;
-
-    }
 
     public function renderPaginationString() {
 
         if (!$this->q) return;
 
-        $fieldNameString = $this->getLanguageString2_('pagination_string_entries');
+        $fieldNameString = $this->getLanguageString('pagination_string_entries', '__');
         // echo '<h1>'.$fieldNameString.'</h1>';
         // print_r($this->$fieldNameString);
         $pagination_string_entries = $this->$fieldNameString;
