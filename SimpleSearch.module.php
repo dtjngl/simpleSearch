@@ -92,10 +92,10 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         // Store the path of the custom markup functions file
         $this->customMarkupFilePath = $this->config->paths->templates . $this->custom_search_results_markup;
 
-        if (!empty($this->customMarkupFilePath) && file_exists($this->customMarkupFilePath)) {
+        if (!empty($this->custom_search_results_markup) && file_exists($this->customMarkupFilePath)) {
             require_once($this->customMarkupFilePath);
         }
-
+        
         // Store the path of the default markup functions file
         $this->defaultMarkupFilePath = __DIR__ . '/_default_markup_functions.php';
 
@@ -219,8 +219,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         if ($this->q) {
 
-            $fieldNameString = $this->getLanguageString('all_entries_label', '__');
-            $this->allResultsLabel = $this->$fieldNameString;
+            $this->allResultsLabel = $this->checkAndGetLanguageValue('all_entries_label', '__');
         
             $indexedCategories = $this->indexedCategories;
             
@@ -245,7 +244,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
                 $this->results->set($cat, $filteredMatches);
                 $this->totals->set($cat, $total);
 
-                // $string = $this->getLanguageString('label');
                 $string = $this->getLanguageString('simplesearch_category', '__');
                 $categoryLabel = $this->templates->get($category)->$string;
 
@@ -374,18 +372,12 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     
     }
 
+    protected function checkAndGetLanguageValue(string $key, string $x='') {
+        $fieldNameString = $this->getLanguageString($key, $x);
+        return $this->$fieldNameString;
+    }
 
-    // private function getLanguageString(string $key) {
-    //     $language = $this->user->language;
-    //     if ($language->name !== 'default') {
-    //         $string = $key.$language->id;
-    //         return $string;
-    //     } 
-    //     return $key;
-    // }
-
-
-    private function getLanguageString(string $key, string $x='') {
+    protected function getLanguageString(string $key, string $x='') {
         $language = $this->user->language;
         if ($language->name !== 'default') {
             $string = $key.$x.$language->id;
@@ -393,12 +385,11 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         } 
         return $key;
     }
-            
+        
 
     public function renderCriteriaMarkup() {
 
-        $fieldNameString = $this->getLanguageString('search_criteria', '__');
-        $searchCriteriaFormat = $this->$fieldNameString;
+        $searchCriteriaFormat = $this->checkAndGetLanguageValue('search_criteria', '__');
     
         if (!$this->q) return;
     
@@ -536,10 +527,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         if (!$this->q) return;
 
-        $fieldNameString = $this->getLanguageString('pagination_string_entries', '__');
-        // echo '<h1>'.$fieldNameString.'</h1>';
-        // print_r($this->$fieldNameString);
-        $pagination_string_entries = $this->$fieldNameString;
+        $pagination_string_entries = $this->checkAndGetLanguageValue('pagination_string_entries', '__');
 
         // pagination string :D
 
