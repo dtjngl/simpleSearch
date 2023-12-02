@@ -93,15 +93,14 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         $this->customMarkupFilePath = $this->config->paths->templates . $this->custom_search_results_markup;
 
         if (!empty($this->custom_search_results_markup) && file_exists($this->customMarkupFilePath)) {
-            require_once($this->customMarkupFilePath);
+            require_once($this->customMarkupFilePath);#
+        } else {
+            // Store the path of the default markup functions file
+            $this->defaultMarkupFilePath = __DIR__ . '/_default_markup_functions.php';            
+            // Include the default markup functions file to access renderDefaultMarkup function
+            require_once($this->defaultMarkupFilePath);            
         }
         
-        // Store the path of the default markup functions file
-        $this->defaultMarkupFilePath = __DIR__ . '/_default_markup_functions.php';
-
-        // Include the default markup functions file to access renderDefaultMarkup function
-        require_once($this->defaultMarkupFilePath);
-
     }
 
 
@@ -151,9 +150,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         
 
     protected function setIndexedcategories() {
-        // Return an array of template names you want to index by default.
-        // For example, to index all pages from the "project" and "article" templates:
-        // return ['', 'project', 'article'];
 
         $indexedCategories = new WireArray;
 
@@ -167,20 +163,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         $this->indexedCategories = $indexedCategories;
 
     }
-
-
-    // public function getModuleConfigInputfields() {
-
-    //     $inputfields = new InputfieldWrapper();
-
-    //     return $inputfields;
-
-    // }
-
-
-
-
-
 
 
     protected function updateStart() {
@@ -212,6 +194,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         }
 
     }
+
     
     public function handleSearch() {
 
@@ -303,75 +286,112 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     }
 
 
-    public function renderMarkupForSearchCategory($match, $source) {
-
-        $functionName = "renderSearchMarkup_{$source}";
-
-        if (function_exists($functionName)) {
-            return call_user_func($functionName, $match);
-        }
-
-        return $this->renderDefaultMarkup($match);
-
-
-    }
-
-
-    protected function renderDefaultMarkup($match) {
+    protected function render_DefaultMarkup($matches) {
 
         $html = '';
-        
-        $html .= '<a href="'.$match->url.'" target="_blank"><h3>'.$match->title.'</h3></a>';
-    
-        $html .= $this->renderSnippet($match);
+
+        foreach ($matches as $match) {
+            // $html .= $match->template->label;            
+            $html .= '<li class="border-b border-gray-200 group hover:bg-white">';
+            $html .=    '<a href="'.$match->url.'" target="_blank">';
+			$html .= 	    '<div class="py-4">';
+            $html .=            '<strong>'.$match->title.'</strong>';
+            $html .=            '<div>' . $this->render_Snippet($match) . '</div>';
+            $html .=        '</div>';
+            $html .=    '</a>';
+            $html .= '</li>';
+        }
 
         return $html;
     
     }
 
+    
+    public function renderMarkupForSearchCategory($matches) {
 
-    public function renderSnippet($match, $start=25, $end=25) {
+        if (method_exists($matches->first, 'renderSingle_SearchMarkup')) {
+            $out = $matches->first->renderLayout_Search($matches);
+            return $out;
+        } else {
+            return $this->render_DefaultMarkup($matches);
+        }
+    }
 
+
+    public function render_Snippet($match, $start = 25, $end = 25) {
+        
+        $maxSnippets = $this->snippets_amount;
         $html = '';
+        $searchPhrase = $this->q;
+        $searchWords = explode(' ', $searchPhrase);
 
-        // Create an array to store snippets for each field
         $snippets = array();
-
         $uniqueFields = $this->getUniqueFieldsFromTemplate($match->template);
-
-
-        // Find snippets for each field where the search term was found
+            
+        // Iterate through each field to find occurrences of the search phrase and words
         foreach ($uniqueFields as $field) {
-            $content = strip_tags($match->$field); // Strip HTML tags from the content
-            if (stripos($content, $this->q) !== false) {
-                // Find the position of the search term in the content
-                $position = stripos($content, $this->q);
-                // Extract a snippet of text around the matched term
-                $startPos = max(0, $position - $start); // Get 50 characters before the matched term
-                $endPos = min(strlen($content), $position + $end); // Get 50 characters after the matched term
-                
-                // Highlight the search term within the snippet using <strong> tags
-                $snippet = substr($content, $startPos, $position - $startPos) . "<strong>" . substr($content, $position, strlen($this->q)) . "</strong>" . substr($content, $position + strlen($this->q), $endPos - ($position + strlen($this->q)));
-                
-                // Add the snippet to the snippets array
-                $snippets[$field] = $snippet;
+            $content = strip_tags($match->$field);
+    
+            // Generate snippets for the entire phrase if found
+            $phrasePositions = array();
+            $phrasePosition = stripos($content, $searchPhrase);
+            while ($phrasePosition !== false) {
+                $phrasePositions[] = $phrasePosition;
+                $phrasePosition = stripos($content, $searchPhrase, $phrasePosition + 1);
+            }
+    
+            foreach ($phrasePositions as $position) {
+                $phraseStartPos = max(0, $position - $start);
+                $phraseEndPos = min(strlen($content), $position + strlen($searchPhrase) + $end);
+                $phraseSnippet = substr($content, $phraseStartPos, $phraseEndPos - $phraseStartPos);
+                $snippets[$field][] = '... ' . str_ireplace($searchPhrase, '<strong>' . $searchPhrase . '</strong>', $phraseSnippet) . ' ...';
+            }
+    
+            // Generate snippets for each word if found
+            foreach ($searchWords as $word) {
+                $wordPositions = array();
+                $wordPosition = stripos($content, $word);
+                while ($wordPosition !== false) {
+                    $wordPositions[] = $wordPosition;
+                    $wordPosition = stripos($content, $word, $wordPosition + 1);
+                }
+    
+                foreach ($wordPositions as $position) {
+                    $wordStartPos = max(0, $position - $start);
+                    $wordEndPos = min(strlen($content), $position + strlen($word) + $end);
+                    $wordSnippet = substr($content, $wordStartPos, $wordEndPos - $wordStartPos);
+    
+                    // If the snippet ends in the middle of a word, find the whole word
+                    if ($wordEndPos < strlen($content)) {
+                        $nextSpacePos = strpos($content, ' ', $wordEndPos);
+                        if ($nextSpacePos !== false) {
+                            $wordSnippet = substr($wordSnippet, 0, $nextSpacePos - $wordStartPos);
+                        }
+                    }
+    
+                    $snippets[$field][] = '... ' . str_ireplace($word, '<strong>' . $word . '</strong>', $wordSnippet) . ' ...';
+                }
             }
         }
-
-        // Check if there is at least one snippet
-        if (!empty($snippets)) {
-            // Concatenate all the snippets into one string
-            $combinedSnippet = '... ' . implode(' ... ', $snippets) . ' ...';
-
-            // Wrap the combined snippets with <p></p> tags
-            $html .= '<p>' . $combinedSnippet . '</p>';
-
-        }
-
-        return $html;
     
+        // Limit the number of snippets to a maximum of 5
+        foreach ($snippets as $field => &$fieldSnippets) {
+            $fieldSnippets = array_slice($fieldSnippets, 0, $maxSnippets);
+        }
+    
+        // Check if there are any snippets
+        if (!empty($snippets)) {
+            // Combine snippets for each field into one string with hyphens in between
+            foreach ($snippets as $field => $fieldSnippets) {
+                $combinedSnippet = implode(' - ', $fieldSnippets);
+                $html .= "<p>$combinedSnippet</p>";
+            }
+        } 
+    
+        return $html;
     }
-
+            
+    
     protected function checkAndGetLanguageValue(string $key, string $x='') {
         $fieldNameString = $this->getLanguageString($key, $x);
         return $this->$fieldNameString;
@@ -387,7 +407,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     }
         
 
-    public function renderCriteriaMarkup() {
+    public function render_CriteriaMarkup() {
 
         $searchCriteriaFormat = $this->checkAndGetLanguageValue('search_criteria', '__');
     
@@ -405,7 +425,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     }
 
 
-    public function renderOverviewMarkup() {
+    public function render_OverviewMarkup() {
 
         if (!$this->q) return;
 
@@ -420,7 +440,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
             if ($cat == 0 || !$cat) {
                 $html .= '<strong>' . $this->allResultsLabel . ' (' . $allTotals . '), </strong>';
             } else {
-                $html .= '<a class="colorlinks" href="./?q=' . $this->q . '">' . $this->allResultsLabel . ' (' . $allTotals . '), </a>';
+                $html .= '<a class="colorlink" href="./?q=' . $this->q . '">' . $this->allResultsLabel . ' (' . $allTotals . '), </a>';
             }
         }
 
@@ -428,102 +448,87 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         foreach ($this->indexedCategories as $key => $content) {
             if ($key == 0) continue;
-            // echo '<pre>';
-            // print_r($this->templates->get($content)->$string);
-            // echo '</pre>';
 
             $total = $this->totals->eq($key);
+
             if ($total < 1) {
                 $html .= '<strong class="grey">' . $this->labels->eq($key) . ' (' . $total . '), </strong>';
             } else {
                 if ($cat == $key) {
                     $html .= '<strong>' . $this->labels->eq($key) . ' (' . $total . '), </strong>';
                 } else {
-                    // $html .= '<a class="colorlinks" href="./?q=' . $this->q . '&cat=' . $key . '">' . $this->labels->eq($key) . ' (' . $total . '), </a>';
-                    $html .= '<a class="colorlinks" href="./?q=' . $this->q . '&cat=' . $key . '">' . $this->labels->eq($key) . ' (' . $total . '), </a>';
+                    // $html .= '<a class="colorlink" href="./?q=' . $this->q . '&cat=' . $key . '">' . $this->labels->eq($key) . ' (' . $total . '), </a>';
+                    $html .= '<a class="colorlink" href="./?q=' . $this->q . '&cat=' . $key . '">' . $this->labels->eq($key) . ' (' . $total . '), </a>';
                 }
             }
+
         }
 
-        $html .= '<br/><h4><hr>';
+        $html .= '<br/><hr>';
 
         return $html;
 
     }
 
 
-    public function renderResultsMarkup() {
+    public function render_ResultsMarkup() {
 
         if (!$this->q) return;
         
         $allTotals = $this->totals->eq(0);
         $cat = $this->cat;
 
-        $html = '';
-
         // results :D
+
+        $html = '';
 
         if ($cat == 0) {
             foreach ($this->results as $key => $matches) {
                 if ($key == 0) continue; 
+
                 $total = $this->totals->eq($key); 
+
                 if ($total < 1) continue;
 
-                $html .= '<h3><a class="colorlinks" href="./?q=' . $this->q . '&cat=' . $key . '">' . $this->labels->eq($key) . ' (' . $total . ')</a></h3>';
-                $html .= '<ul class="nostyle">';
-
                 $limit = $this->sublimit;
-
                 $matches->filter("limit=$limit");
 
-                foreach ($matches as $i => $match) {
-                    // $html .= layout('search_' . $source, $item);
-                    $source = $match->template->name;
-                    $html .= $this->renderMarkupForSearchCategory($match, $source);
-                    // if($match->editable()):
-                    //     $html .= '<p><a href="' . $match->editUrl() . '" target="_blank">Edit this page</a></p>';
-                    // endif;
-                    $html .= '<hr>';
-                }
-
-                $html .= '</ul>';
+                $html .= '<section>';
+                $html .= '  <h3><a class="colorlink" href="./?q=' . $this->q . '&cat=' . $key . '">' . $this->labels->eq($key) . ' (' . $total . ')</a></h3>';                
+                $html .= '  <ul class="">';
+                $html .= $this->renderMarkupForSearchCategory($matches);
+                $html .= '  </ul>';
 
                 if ($total > $this->sublimit) {
-                    $html .= '<h3><a class="colorlinks" href="./?q=' . $this->q . '&cat=' . $key . '">mehr…</a></h3>';
+                    $html .= '<p class="py-12 text-2xl"><a class="colorlink" href="./?q=' . $this->q . '&cat=' . $key . '">mehr…</a></p>';
                 }
-            
-                $html .= '<hr>';
+
+                $html .= '</section><hr>';
+
             }
         } else {
+            
             $total = $this->totals->eq($cat); 
-            $html .= '<h3><strong>' . $this->labels->eq($cat) . ' (' . $total . ')</strong></h3>';
-            $html .= '<ul class="nostyle">';
-
             $matches = $this->results->eq($cat);
             $start = $this->updateStart();
             $limit = (int)$this->limit;
             $pagMatches = $matches->find("start=$start, limit=$limit");
-
-            foreach ($pagMatches as $i => $match) {
-                $source = $match->template->name;
-                $html .= $this->renderMarkupForSearchCategory($match, $source);
-                // if($match->editable()):
-                //     $html .= '<p><a href="' . $match->editUrl() . '" target="_blank">Edit this page</a></p>';
-                // endif;
-                $html .= '<hr>';
-            }
-
-            $html .= '</ul>';
-            $html .= '<hr>';
-
+            
+            $html .= '<section>';            
+            $html .= '  <h3><strong>' . $this->labels->eq($cat) . ' (' . $total . ')</strong></h3>';
+            $html .= '  <ul class="nostyle">';
+            $html .= $this->renderMarkupForSearchCategory($pagMatches);
+            $html .= '  </ul>';
+            $html .= '</section>';
+            
         }
-
+        
         return $html;
 
     }
 
 
-    public function renderPaginationString() {
+    public function render_PaginationString() {
 
         if (!$this->q) return;
 
@@ -563,9 +568,9 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         
     }
 
-    public function renderFilters() {
+    public function render_Filters($url = './') {
 
-        $html = '<form action="./" method="get">';
+        $html = '<form action="'.$url.'" method="get">';
         $qValue = isset($this->q) ? htmlentities($this->q) : '';
         $html .= '<label for="q">Search:</label>';
         $html .= '<input type="text" id="q" name="q" value="' . $qValue . '">';
@@ -575,33 +580,43 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         return $html;
 
     }
+
+    public function returnQ() {
+
+        $qValue = isset($this->q) ? htmlentities($this->q) : '';
     
-    public function renderPaginationMarkup() {
+        return $qValue;
+
+    }
+
+    public function __render_PaginationMarkup() {
     
-        $options = array(
-            'listClass' => 'pagination noselect uk-flex uk-flex-wrap uk-flex-center',
-            'linkMarkup' => "<a href='{url}?q={$this->q}&cat={$this->cat}'>{out}</a>",
-            'currentItemClass' => 'current',
-            'separatorItemLabel' => '…',
-            'separatorItemClass' => 'uk-disabled',
-            'previousItemClass' => 'nextprev',
-            'nextItemClass' => 'nextprev',
-            'currentLinkMarkup' => '<span class="current">{out}</span>',
-            'nextItemLabel' => '<span uk-icon="icon: arrow-right; ratio: 1.8;"></span>',
-            'previousItemLabel' => '<span uk-icon="icon: arrow-left; ratio: 1.8;"></span>',
-            'numPageLinks' => '4',
-            'lastItemClass' => ''
-        );
-        
         $html = '';
-    
-        // Get the total number of results for the current category
-        $totalResults = $this->totals->eq($this->cat);
-    
-        $pager = $this->wire('modules')->get('MarkupPagerNav');
 
         // Check if we need to render pagination links
         if ($this->cat > 0 && $this->q != '') {
+
+            $options = array(
+                'listClass' => 'pagination noselect uk-flex uk-flex-wrap uk-flex-center',
+                'linkMarkup' => "<a href='{url}?q={$this->q}&cat={$this->cat}'>{out}</a>",
+                'currentItemClass' => 'current',
+                'separatorItemLabel' => '…',
+                'separatorItemClass' => 'uk-disabled',
+                'previousItemClass' => 'nextprev',
+                'nextItemClass' => 'nextprev',
+                'currentLinkMarkup' => '<span class="current">{out}</span>',
+                'nextItemLabel' => '<span uk-icon="icon: arrow-right; ratio: 1.8;"></span>',
+                'previousItemLabel' => '<span uk-icon="icon: arrow-left; ratio: 1.8;"></span>',
+                'numPageLinks' => '4',
+                'lastItemClass' => ''
+            );
+            
+        
+            $pager = $this->wire('modules')->get('MarkupPagerNav');
+
+            // Get the total number of results for the current category
+            $totalResults = $this->totals->eq($this->cat);
+
             // Update the 'total' option in the $options array with the total number of results
             $options['total'] = $totalResults;
     
@@ -611,15 +626,52 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
             $limit = (int)$this->limit;
             $matches->setStart($start);
             $matches->setLimit($limit);
+            $this->matches = $matches;
         
-            // Render the pagination links
-            $html .= '<section>';
-            $html .= '<div class="uk-flex uk-flex-center">' . $pager->render($matches, $options) . '</div>';
-            $html .= '</section>';
+            // // Render the pagination links
+            // $html .= '<section>';
+            // $html .= '<div class="uk-flex uk-flex-center">' . $pager->render($matches, $options) . '</div>';
+            // $html .= '</section>';
+
+            // ContentPage
+            $html = '<section>';
+			$html .= '<div class="px-4 py-3 sm:px-6">';
+			$html .= '<div class="flex justify-center p-4 sm:flex sm:flex-1 sm:items-center sm:justify-between">';
+			$html .= '<div class="w-full text-center">';
+			$html .= '<nav class="isolate inline-flex space-x-px rounded-md shadow-sm" aria-label="Pagination">';
+			
+
+            $options = array(
+                'numPageLinks' => 5,
+                'listClass' => 'flex items-center justify-between',
+                'linkMarkup' => "<a class='align-baseline font-cf-regular relative inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 border border-gray-300 bg-white' href='{url}'>{out}</a>",
+                'currentItemClass' => 'border border-teal-600 relative z-10 inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-800 focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600',
+                'itemMarkup' => '<li class="align-baseline {class} h-auto text-cc1 hover:bg-cc1">{out}</li>',
+                'currentLinkMarkup' => "<a class='align-baseline font-cf-regular text-white'>{out}</a>",
+                'separatorItemClass' => 'align-baseline font-cf-regular text-lg px-3 relative inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 focus:z-20 focus:outline-offset-0 border border-gray-300 bg-white',
+                'nextItemClass' => '',
+                'previousItemClass' => '',
+                'lastItemClass' => '',
+                'firstItemClass' => '',
+                'nextItemLabel' => '>',
+                'previousItemLabel' => '<',
+                'separatorItemLabel' => '<span>…</span>',
+            );            
+    
+			$html .= $pager->render($matches, $options);
+			
+			$html .= '</nav>';
+			$html .= '</div>';
+			$html .= '</div>';
+			$html .= '</div>';
+			$html .= '</section>';
+
         } 
     
         // Return the stored HTML
         return $html;
+
     }
+
         
 }
