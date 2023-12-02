@@ -214,7 +214,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
                 // Pass the sanitized input to createSelector() to get the selector string.
                 $selector = $this->createSelector($this->q, $category);
-
+                bd($selector);
                 $matches = $this->pages("$selector, start=0, limit=99999");
 
                 // Filter the matches to include only pages with a matching value in the active language
@@ -254,7 +254,8 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         $search_operator = $this->search_operator;
 
         $fields = $this->getUniqueFieldsFromTemplate($category);
-        $selector .= ", " . implode('|', $fields) . "$search_operator.$q";
+        $lang = $this->user->language;
+        $selector .= ", " . implode('|', $fields) . "$search_operator.$q" . ", language=$lang";
 
         return $selector;
 
