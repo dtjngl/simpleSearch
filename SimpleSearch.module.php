@@ -255,7 +255,8 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         $fields = $this->getUniqueFieldsFromTemplate($category);
         $lang = $this->user->language;
-        $selector .= ", " . implode('|', $fields) . "$search_operator.$q" . ", language=$lang";
+
+        $selector .= ", " . implode('|', $fields) . "$search_operator.$q";
 
         return $selector;
 
@@ -292,15 +293,19 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         $html = '';
 
         foreach ($matches as $match) {
+
+            $snippet = $this->checkandRenderSnippets($match);
             // $html .= $match->template->label;            
             $html .= '<li class="border-b border-gray-200 group hover:bg-white">';
-            $html .=    '<a href="'.$match->url.'" target="_blank">';
+            $html .=    '<a href="'.$match->url.'">';
 			$html .= 	    '<div class="py-4">';
             $html .=            '<strong>'.$match->title.'</strong>';
-            $html .=            '<div>' . $this->render_Snippet($match) . '</div>';
+            // $html .=            '<div>'.__('Language').': ' . $snippet['language'] . '</div>';
+            $html .=            '<div>' . $snippet['markup'] . '</div>';
             $html .=        '</div>';
             $html .=    '</a>';
             $html .= '</li>';
+
         }
 
         return $html;
@@ -319,16 +324,44 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     }
 
 
+    protected function checkandRenderSnippets($match) {
+        // Get the user's current lahyphenatenguage
+        $userLanguage = $this->user->language; // ... (get user language logic here)
+    
+        // Iterate through languages
+        foreach ($this->languages as $language) {
+            // Set the current language
+            wire('user')->language = $language;
+    
+            // Render snippets using render_Snippet
+            $snippetMarkup = $this->render_Snippet($match);
+    
+            // Check if snippets were found
+            if ($snippetMarkup) {
+                // Return an array with the language and snippet markup
+                return [
+                    'language' => $language,
+                    'markup' => $snippetMarkup
+                ];
+            }
+        }
+    
+        // If no snippets were found in any language, return false
+        return false;
+    }
+
+    
     public function render_Snippet($match, $start = 25, $end = 25) {
-        
         $maxSnippets = $this->snippets_amount;
         $html = '';
         $searchPhrase = $this->q;
         $searchWords = explode(' ', $searchPhrase);
-
-        $snippets = array();
+    
         $uniqueFields = $this->getUniqueFieldsFromTemplate($match->template);
-            
+    
+        // Initialize snippets array for each field
+        $snippets = array_fill_keys($uniqueFields, array());
+    
         // Iterate through each field to find occurrences of the search phrase and words
         foreach ($uniqueFields as $field) {
             $content = strip_tags($match->$field);
@@ -345,53 +378,86 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
                 $phraseStartPos = max(0, $position - $start);
                 $phraseEndPos = min(strlen($content), $position + strlen($searchPhrase) + $end);
                 $phraseSnippet = substr($content, $phraseStartPos, $phraseEndPos - $phraseStartPos);
-                $snippets[$field][] = '... ' . str_ireplace($searchPhrase, '<strong>' . $searchPhrase . '</strong>', $phraseSnippet) . ' ...';
+    
+                // If snippet is identical to the previous one, skip it
+                if (!in_array($phraseSnippet, $snippets[$field])) {
+                    $snippets[$field][] = $phraseSnippet;
+                    $html .= $this->highlightSearchTerm($phraseSnippet, $searchPhrase) . ' ... ';
+                }
             }
     
-            // Generate snippets for each word if found
+            $wordPositions = array();
+
             foreach ($searchWords as $word) {
-                $wordPositions = array();
                 $wordPosition = stripos($content, $word);
                 while ($wordPosition !== false) {
                     $wordPositions[] = $wordPosition;
                     $wordPosition = stripos($content, $word, $wordPosition + 1);
                 }
-    
+                
                 foreach ($wordPositions as $position) {
-                    $wordStartPos = max(0, $position - $start);
-                    $wordEndPos = min(strlen($content), $position + strlen($word) + $end);
-                    $wordSnippet = substr($content, $wordStartPos, $wordEndPos - $wordStartPos);
-    
-                    // If the snippet ends in the middle of a word, find the whole word
-                    if ($wordEndPos < strlen($content)) {
-                        $nextSpacePos = strpos($content, ' ', $wordEndPos);
+                    // Ensure $wordPositions is an array before iterating over it
+                    if (is_array($wordPositions)) {
+                        $wordStartPos = max(0, $position - $start);
+                        $wordEndPos = min(strlen($content), $position + strlen($word) + $end);
+                        
+                        // Find the start of the word
+                        $wordStartPos = ($wordStartPos > 0) ? strrpos(substr($content, 0, $wordStartPos), ' ') + 1 : 0;
+                
+                        // Find the end of the word
+                        $nextSpacePos = strpos($content, ' ', $position);
                         if ($nextSpacePos !== false) {
-                            $wordSnippet = substr($wordSnippet, 0, $nextSpacePos - $wordStartPos);
+                            $wordEndPos = $nextSpacePos;
+                        }
+                
+                        $wordSnippet = substr($content, $wordStartPos, $wordEndPos - $wordStartPos);
+                
+                        // If snippet is identical to the previous one, skip it
+                        if (!in_array($wordSnippet, $snippets[$field])) {
+                            $snippets[$field][] = $wordSnippet;
+                            $html .= $this->highlightSearchTerm($wordSnippet, $word) . ' ... ';
                         }
                     }
-    
-                    $snippets[$field][] = '... ' . str_ireplace($word, '<strong>' . $word . '</strong>', $wordSnippet) . ' ...';
                 }
+
             }
-        }
-    
-        // Limit the number of snippets to a maximum of 5
-        foreach ($snippets as $field => &$fieldSnippets) {
-            $fieldSnippets = array_slice($fieldSnippets, 0, $maxSnippets);
-        }
-    
-        // Check if there are any snippets
-        if (!empty($snippets)) {
-            // Combine snippets for each field into one string with hyphens in between
-            foreach ($snippets as $field => $fieldSnippets) {
-                $combinedSnippet = implode(' - ', $fieldSnippets);
-                $html .= "<p>$combinedSnippet</p>";
-            }
-        } 
-    
-        return $html;
-    }
             
+        }
+    
+        if (!empty($html)) {
+            // Remove the trailing ellipsis and spaces
+            $html = rtrim($html, ' ... ');
+    
+            return "<p>...$html...</p>";
+        }
+    
+        return false;
+    }
+    
+
+
+    // // Custom function to replace search term with highlighted version while preserving case
+    // function replaceWithHighlight($content, $searchTerm) {
+    //     $highlightedTerm = '<strong>' . $searchTerm . '</strong';
+    //     $pattern = '/\b' . preg_quote($searchTerm, "/") . '\b/i';
+
+    //     return preg_replace($pattern, $highlightedTerm, $content);
+    // }
+
+
+    // Helper method to highlight the search term
+    protected function highlightSearchTerm($snippet, $searchTerm) {
+        return $this->replaceWithHighlight($snippet, $searchTerm);
+    }
+        
+
+    // Custom function to replace search term with highlighted version while preserving case
+    function replaceWithHighlight($content, $searchTerm) {
+        $pattern = '/\b' . preg_quote($searchTerm, "/") . '\b/i';
+        $replacement = '<strong>$0</strong>';
+        return preg_replace($pattern, $replacement, $content);
+    }
+
     
     protected function checkAndGetLanguageValue(string $key, string $x='') {
         $fieldNameString = $this->getLanguageString($key, $x);
