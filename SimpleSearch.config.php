@@ -58,7 +58,14 @@ $config = array(
     'type' => 'InputfieldText',
     'value' => '~%=',
     'description' => $this->_('find all available operands on the PW documentation page https://processwire.com/docs/selectors/#operators'),
-    'columnWidth' => 50,
-  )
+    'columnWidth' => 25,
+  ),
+  'snippets_amount' => array(
+    'label' => 'Maximum amount of snippets',
+    'type' => 'integer',
+    'value' => 5,
+    'description' => $this->_('enter the maximum of snippets shown for a single results'),
+    'columnWidth' => 25,
+  ),
 );
 

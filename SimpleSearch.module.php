@@ -34,6 +34,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         // Define the pages to search
         // $this->indexedCategories = ["", "project", "article"];
         
+        $this->title = 'simple search';
         $this->q = '';
         $this->cat = 0;
         
@@ -288,29 +289,30 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     }
 
 
-    protected function render_DefaultMarkup($matches) {
+    // protected function render_DefaultMarkup($matches) {
 
-        $html = '';
+    //     $html = '';
 
-        foreach ($matches as $match) {
+    //     foreach ($matches as $match) {
 
-            $snippet = $this->checkandRenderSnippets($match);
-            // $html .= $match->template->label;            
-            $html .= '<li class="border-b border-gray-200 group hover:bg-white">';
-            $html .=    '<a href="'.$match->url.'">';
-			$html .= 	    '<div class="py-4">';
-            $html .=            '<strong>'.$match->title.'</strong>';
-            // $html .=            '<div>'.__('Language').': ' . $snippet['language'] . '</div>';
-            $html .=            '<div>' . $snippet['markup'] . '</div>';
-            $html .=        '</div>';
-            $html .=    '</a>';
-            $html .= '</li>';
+    //         $snippet = $this->checkAndRenderSnippets($match);
 
-        }
+    //         // $html .= $match->template->label;            
+    //         $html .= '<li class="border-b border-gray-200 group hover:bg-white">';
+    //         $html .=    '<a href="'.$match->url.'">';
+	// 		$html .= 	    '<div class="py-4">';
+    //         $html .=            '<strong>'.$match->title.'</strong>';
+    //         // $html .=            '<div>'.__('Language').': ' . $snippet['language'] . '</div>';
+    //         $html .=            '<div>' . $snippet['markup'] . '</div>';
+    //         $html .=        '</div>';
+    //         $html .=    '</a>';
+    //         $html .= '</li>';
 
-        return $html;
+    //     }
+
+    //     return $html;
     
-    }
+    // }
 
     
     public function renderMarkupForSearchCategory($matches) {
@@ -324,7 +326,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     }
 
 
-    protected function checkandRenderSnippets($match) {
+    protected function checkAndRenderSnippets($match) {
         // Get the user's current lahyphenatenguage
         $userLanguage = $this->user->language; // ... (get user language logic here)
     
@@ -352,89 +354,69 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     
     public function render_Snippet($match, $start = 25, $end = 25) {
+
         $maxSnippets = $this->snippets_amount;
         $html = '';
         $searchPhrase = $this->q;
         $searchWords = explode(' ', $searchPhrase);
-    
         $uniqueFields = $this->getUniqueFieldsFromTemplate($match->template);
     
         // Initialize snippets array for each field
         $snippets = array_fill_keys($uniqueFields, array());
     
-        // Iterate through each field to find occurrences of the search phrase and words
         foreach ($uniqueFields as $field) {
             $content = strip_tags($match->$field);
-    
-            // Generate snippets for the entire phrase if found
-            $phrasePositions = array();
-            $phrasePosition = stripos($content, $searchPhrase);
-            while ($phrasePosition !== false) {
-                $phrasePositions[] = $phrasePosition;
-                $phrasePosition = stripos($content, $searchPhrase, $phrasePosition + 1);
-            }
-    
-            foreach ($phrasePositions as $position) {
-                $phraseStartPos = max(0, $position - $start);
-                $phraseEndPos = min(strlen($content), $position + strlen($searchPhrase) + $end);
-                $phraseSnippet = substr($content, $phraseStartPos, $phraseEndPos - $phraseStartPos);
-    
-                // If snippet is identical to the previous one, skip it
-                if (!in_array($phraseSnippet, $snippets[$field])) {
-                    $snippets[$field][] = $phraseSnippet;
-                    $html .= $this->highlightSearchTerm($phraseSnippet, $searchPhrase) . ' ... ';
-                }
-            }
-    
-            $wordPositions = array();
-
+        
+            // Generate snippets for the entire phrase and words if found
+            $positions = array();
             foreach ($searchWords as $word) {
                 $wordPosition = stripos($content, $word);
                 while ($wordPosition !== false) {
-                    $wordPositions[] = $wordPosition;
+                    $positions[] = $wordPosition;
                     $wordPosition = stripos($content, $word, $wordPosition + 1);
                 }
-                
-                foreach ($wordPositions as $position) {
-                    // Ensure $wordPositions is an array before iterating over it
-                    if (is_array($wordPositions)) {
-                        $wordStartPos = max(0, $position - $start);
-                        $wordEndPos = min(strlen($content), $position + strlen($word) + $end);
-                        
-                        // Find the start of the word
-                        $wordStartPos = ($wordStartPos > 0) ? strrpos(substr($content, 0, $wordStartPos), ' ') + 1 : 0;
-                
-                        // Find the end of the word
-                        $nextSpacePos = strpos($content, ' ', $position);
-                        if ($nextSpacePos !== false) {
-                            $wordEndPos = $nextSpacePos;
-                        }
-                
-                        $wordSnippet = substr($content, $wordStartPos, $wordEndPos - $wordStartPos);
-                
-                        // If snippet is identical to the previous one, skip it
-                        if (!in_array($wordSnippet, $snippets[$field])) {
-                            $snippets[$field][] = $wordSnippet;
-                            $html .= $this->highlightSearchTerm($wordSnippet, $word) . ' ... ';
-                        }
-                    }
-                }
-
             }
-            
+        
+            // Combine positions for phrases and words
+            $positions = array_merge($positions, array_unique($positions));
+        
+            foreach ($positions as $position) {
+                $startPos = max(0, $position - $start);
+                $endPos = min(strlen($content), $position + $end);
+        
+                $snippet = substr($content, $startPos, $endPos - $startPos);
+        
+                // If snippet is identical to the previous one, skip it
+                if (!in_array($snippet, $snippets[$field])) {
+                    $snippets[$field][] = $snippet;
+                }
+            }
         }
-    
-        if (!empty($html)) {
+        
+        // Limit the number of snippets to a maximum of $maxSnippets
+        foreach ($snippets as $field => &$fieldSnippets) {
+            $fieldSnippets = array_slice($fieldSnippets, 0, $maxSnippets);
+        }
+        
+        // Check if there are any snippets
+        if (!empty($snippets)) {
+            // Combine snippets for each field into one string with ellipses in between
+            foreach ($snippets as $field => $fieldSnippets) {
+                $combinedSnippet = implode(' ... ', $fieldSnippets);
+                $html .= $combinedSnippet . '...';
+            }
+            $html .= '...';
+        
             // Remove the trailing ellipsis and spaces
             $html = rtrim($html, ' ... ');
-    
-            return "<p>...$html...</p>";
+        
+            return "<p>...4$html...5</p>";
         }
-    
+                    
         return false;
+
     }
     
-
 
     // // Custom function to replace search term with highlighted version while preserving case
     // function replaceWithHighlight($content, $searchTerm) {
