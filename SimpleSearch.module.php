@@ -410,7 +410,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
             // Remove the trailing ellipsis and spaces
             $html = rtrim($html, ' ... ');
         
-            return "<p>...4$html...5</p>";
+            return "<p>...$html...</p>";
         }
                     
         return false;
