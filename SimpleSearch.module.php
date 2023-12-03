@@ -219,8 +219,8 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
                 $matches = $this->pages("$selector, start=0, limit=99999");
 
                 // Filter the matches to include only pages with a matching value in the active language
-                // $filteredMatches = $this->filterCurrentLanguage($matches, $this->q);
-                $filteredMatches = $matches;
+                $filteredMatches = $this->filterCurrentLanguage($matches, $this->q);
+                // $filteredMatches = $matches;
 
                 // Calculate the total matches and the start index for the current page
                 $total = count($filteredMatches);
@@ -248,6 +248,23 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         
     }
     
+
+    protected function filterCurrentLanguage(PageArray $matches, $language) {
+        $filteredMatches = new PageArray();
+    
+        foreach ($matches as $match) {
+            // Check if $match has a languageField and if languageField has a language property
+            // if ($match->languageField && is_object($match->languageField->language)) {
+                // Check if the language name matches the target language's name
+                if ($match->languageField->language->name === $language->name) {
+                    $filteredMatches->add($match);
+                }
+            // }
+        }
+    
+        return $filteredMatches;
+    }
+        
         
     protected function createSelector($q, $category) {
 
@@ -282,6 +299,8 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
             // if (strpos($field->type, "Text") == false && strpos($field->type, "Title") == false) continue;
             if (!in_array($field->type, $allowedFieldTypes)) { continue; }
             $fields[] = $field->name; // Store the name of the field in the $fields array
+            // $fields[] = $this->checkAndGetLanguageValue($field);
+
         }
 
         return array_unique($fields);
