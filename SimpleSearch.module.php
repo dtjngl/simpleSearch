@@ -181,7 +181,9 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     
         // Sanitize and store the search term 'q'
         if (isset($input->get->q)) {
-            $this->q = $sanitizer->text($input->get->q);
+            $q = $sanitizer->text($input->get->q);
+            $q = preg_replace('/[^\p{L}\p{N}_\s]/u', '', $q);
+            $this->q = htmlspecialchars($q, ENT_QUOTES, 'UTF-8');
         } else {
             $this->q = null; // or $this->q = ''; if you prefer an empty string
         }
@@ -225,7 +227,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
                 foreach ($unfilteredMatches as $match) {
                     if ($this->checkAndRenderSnippets($match)) {
                         $snippets = $this->checkAndRenderSnippets($match);
-                        // if ($snippets == '') continue;
+                        if (!$snippets) continue;
                         $match->set('snippets', $snippets);
                         $matches->add($match);
                     }
@@ -307,32 +309,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     }
 
-
-    // protected function render_DefaultMarkup($matches) {
-
-    //     $html = '';
-
-    //     foreach ($matches as $match) {
-
-    //         $snippet = $this->checkAndRenderSnippets($match);
-
-    //         // $html .= $match->template->label;            
-    //         $html .= '<li class="border-b border-gray-200 group hover:bg-white">';
-    //         $html .=    '<a href="'.$match->url.'">';
-	// 		$html .= 	    '<div class="py-4">';
-    //         $html .=            '<strong>'.$match->title.'</strong>';
-    //         // $html .=            '<div>'.__('Language').': ' . $snippet['language'] . '</div>';
-    //         $html .=            '<div>' . $snippet['markup'] . '</div>';
-    //         $html .=        '</div>';
-    //         $html .=    '</a>';
-    //         $html .= '</li>';
-
-    //     }
-
-    //     return $html;
-    
-    // }
-
     
     public function renderMarkupForSearchCategory($matches) {
 
@@ -346,118 +322,75 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
 
     protected function checkAndRenderSnippets($match) {
-        // Get the user's current lahyphenatenguage
-        // $userLanguage = $this->user->language; // ... (get user language logic here)
-    
-        // Iterate through languages
-        // foreach ($this->languages as $language) {
-            // Set the current language
-            // wire('user')->language = $language;
-    
-            // Render snippets using render_Snippet
-            $snippetMarkup = $this->render_Snippet($match);
-    
-            // Check if snippets were found
-            bd("snippetMarkup: " . $snippetMarkup);
 
-            if ($snippetMarkup) {
-                bd("checkAndRenderSnippets: " . $match->title);
-                // Return an array with the language and snippet markup
-                // return [
-                //     'language' => $language,
-                //     'markup' => $snippetMarkup
-                // ];
-                return $snippetMarkup;
-            }
-        // }
-    
-        // If no snippets were found in any language, return false
-        return false;
+        // Get the search term
+        $searchTerm = $this->q;
 
-    }
-    
-
-    public function render_Snippet($match, $snipStart = 25, $snipEnd = 25) {
-
-        $maxSnippets = $this->snippets_amount;
-        $html = '';
-        $searchPhrase = $this->q;
-        $searchWords = explode(' ', $searchPhrase);
+        // Get the unique fields from the template of the $match
         $uniqueFields = $this->getUniqueFieldsFromTemplate($match->template);
     
-        // Initialize snippets array for each field
-        $snippets = array_fill_keys($uniqueFields, array());
-    
+        $snippetMarkups = '';
+
+        // Iterate through each field
         foreach ($uniqueFields as $field) {
-            $content = strip_tags($match->$field);
+            // Get the value of the field from $match
+            $fieldValue = $match->$field;
+
+            // Check if the search term is found in the field value
+            $s = $this->buildSnippets($fieldValue, $searchTerm, 25, 25);
+            if ($s) $snippetMarkups .= $s;
+            
+            // // Check if the search term has spaces
+            // if (strpos($searchTerm, ' ') !== false) {
+            //     $searchWords = explode(' ', $searchTerm);
+            //     foreach ($searchWords as $word) {        
+            //         // Check if the search term is found in the field value
+            //         $s = $this->buildSnippets($fieldValue, $word, 25, 25);
+            //         if ($s) $snippetMarkups .= $s;
+            //     }
+            // }
+                
+        }
+            
+        if ($snippetMarkups != '') {
+            return $snippetMarkups;
+        } else {
+            return false;            
+        }
+
+    }
+            
+
+    protected function buildSnippets($fieldValue, $searchTerm, $snipStart = 25, $snipEnd = 25) {
+        $strippedFieldValue = strip_tags($fieldValue);
+        // Find the position of the search term in the field value
+        $position = stripos($strippedFieldValue, $searchTerm);
     
-            // Add debugging statements
-            bd('Field: ' . $field);
-            bd('Content: ' . $content);
-    
-            // Generate snippets for the entire phrase and words if found
-            $positions = array();
-            foreach ($searchWords as $word) {
-                $wordPosition = stripos($content, $word);
-                while ($wordPosition !== false) {
-                    $positions[] = $wordPosition;
-                    $wordPosition = stripos($content, $word, $wordPosition + 1);
-                }
-            }
-    
-            // Combine positions for phrases and words
-            $positions = array_unique($positions);
-    
-            // Add debugging statements
-            bd('Search Words: ' . implode(', ', $searchWords));
-            bd('Positions: ' . implode(', ', $positions));
-    
-            foreach ($positions as $position) {
-                $snipStartPos = max(0, $position - $snipStart);
-                $endPos = min(strlen($content), $position + $snipEnd);
-    
-                $snippet = substr($content, $snipStartPos, $endPos - $snipStartPos);
-    
-                // Add debugging statement
-                bd('Snippet: ' . $snippet);
-    
-                // If snippet is not empty, add it to the snippets array
-                if ($snippet !== '') {
-                    $snippets[$field][] = $snippet;
-                }
-            }
+        // If the search term is not found, return an empty string
+        if ($position === false) {
+            return false;
         }
     
-        // Limit the number of snippets to a maximum of $maxSnippets
-        foreach ($snippets as $field => &$fieldSnippets) {
-            $fieldSnippets = array_slice($fieldSnippets, 0, $maxSnippets);
-        }
-    
-        // Add debugging statement
-        bd('Snippets: ' . json_encode($snippets));
-    
-        // Check if there are any snippets
-        foreach ($snippets as $field => $fieldSnippets) {
-            if (!empty($fieldSnippets)) {
-                // Combine snippets for each field into one string with ellipses in between
-                $combinedSnippet = implode(' ... ', $fieldSnippets);
-                $html .= $combinedSnippet . ' ... ';
-            }
-        }
-    
-        // Add debugging statement
-        bd('HTML: ' . $html);
-    
-        // Check if $html is not empty, then return the snippet, otherwise return false
-        if (!empty($html)) {
-            // Remove the trailing ellipsis and spaces
-            $html = rtrim($html, ' ... ');
-            return "<p> ... $html ... </p>";
-        }
-    
-        return false;
+        // Calculate the start and end positions for the snippet
+        $startPos = max(0, $position - $snipStart);
+        $endPos = min(strlen($strippedFieldValue), $position + strlen($searchTerm) + $snipEnd);
+
+        // Include the 25 characters before and after the search term as $startChars and $endChars
+        $startChars = max(0, $position - $snipStart);
+        $endChars = min(strlen($strippedFieldValue) - ($position + strlen($searchTerm)), $snipEnd);
+
+        // Extract the characters before and after the snippet
+        $startChars = substr($strippedFieldValue, $startChars, $position - $startChars);
+        $endChars = substr($strippedFieldValue, $position + strlen($searchTerm), $endChars);
+
+        // Surround the snippet with additional characters (e.g., <strong>)
+        $snippet = $startChars . '<strong>' . $searchTerm . '</strong>' . $endChars;
+
+        return $snippet.' … ';
+
     }
         
+
     
     // // Custom function to replace search term with highlighted version while preserving case
     // function replaceWithHighlight($content, $searchTerm) {

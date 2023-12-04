@@ -59,7 +59,16 @@ $config = array(
     'value' => '~%=',
     'description' => $this->_('find all available operands on the PW documentation page https://processwire.com/docs/selectors/#operators'),
     'columnWidth' => 25,
+    'required' => true
   ),
+  // 'phrase_search_operator' => array(
+  //   'label' => 'Phrase Search Operator',
+  //   'type' => 'InputfieldText',
+  //   'value' => '~%=',
+  //   'description' => $this->_('find all available operands on the PW documentation page https://processwire.com/docs/selectors/#operators'),
+  //   'columnWidth' => 20,
+  //   'required' => true
+  // ),
   'snippets_amount' => array(
     'label' => 'Maximum amount of snippets',
     'type' => 'integer',
