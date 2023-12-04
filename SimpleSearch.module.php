@@ -34,7 +34,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         // Define the pages to search
         // $this->indexedCategories = ["", "project", "article"];
         
-        $this->title = 'simple search';
         $this->q = '';
         $this->cat = 0;
         
@@ -216,16 +215,26 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
                 // Pass the sanitized input to createSelector() to get the selector string.
                 $selector = $this->createSelector($this->q, $category);
                 bd($selector);
-                $matches = $this->pages("$selector, start=0, limit=99999");
+                $unfilteredMatches = $this->pages("$selector, start=0, limit=99999");
 
-                // Filter the matches to include only pages with a matching value in the active language
-                $filteredMatches = $this->filterCurrentLanguage($matches, $this->q);
-                // $filteredMatches = $matches;
+                bd(count($unfilteredMatches));
+
+                $matches = new PageArray;
+
+
+                foreach ($unfilteredMatches as $match) {
+                    if ($this->checkAndRenderSnippets($match)) {
+                        $snippets = $this->checkAndRenderSnippets($match);
+                        // if ($snippets == '') continue;
+                        $match->set('snippets', $snippets);
+                        $matches->add($match);
+                    }
+                }
 
                 // Calculate the total matches and the start index for the current page
-                $total = count($filteredMatches);
+                $total = count($matches);
 
-                $this->results->set($cat, $filteredMatches);
+                $this->results->set($cat, $matches);
                 $this->totals->set($cat, $total);
 
                 $string = $this->getLanguageString('simplesearch_category', '__');
@@ -246,25 +255,19 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         } 
         
-    }
-    
+        // echo 'Memory Usage: ' . (memory_get_usage(true) / 1024 / 1024) . ' MB' . PHP_EOL;
 
-    protected function filterCurrentLanguage(PageArray $matches, $language) {
-        $filteredMatches = new PageArray();
-    
-        foreach ($matches as $match) {
-            // Check if $match has a languageField and if languageField has a language property
-            // if ($match->languageField && is_object($match->languageField->language)) {
-                // Check if the language name matches the target language's name
-                if ($match->languageField->language->name === $language->name) {
-                    $filteredMatches->add($match);
-                }
-            // }
-        }
-    
-        return $filteredMatches;
-    }
+        // $startTime = microtime(true);
+
+        // // Your script here
         
+        // $endTime = microtime(true);
+        // $executionTime = $endTime - $startTime;
+        
+        // echo 'Execution Time: ' . $executionTime . ' seconds' . PHP_EOL;
+        
+    }
+    
         
     protected function createSelector($q, $category) {
 
@@ -272,7 +275,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         $search_operator = $this->search_operator;
 
         $fields = $this->getUniqueFieldsFromTemplate($category);
-        $lang = $this->user->language;
 
         $selector .= ", " . implode('|', $fields) . "$search_operator.$q";
 
@@ -299,8 +301,6 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
             // if (strpos($field->type, "Text") == false && strpos($field->type, "Title") == false) continue;
             if (!in_array($field->type, $allowedFieldTypes)) { continue; }
             $fields[] = $field->name; // Store the name of the field in the $fields array
-            // $fields[] = $this->checkAndGetLanguageValue($field);
-
         }
 
         return array_unique($fields);
@@ -347,32 +347,37 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
     protected function checkAndRenderSnippets($match) {
         // Get the user's current lahyphenatenguage
-        $userLanguage = $this->user->language; // ... (get user language logic here)
+        // $userLanguage = $this->user->language; // ... (get user language logic here)
     
         // Iterate through languages
-        foreach ($this->languages as $language) {
+        // foreach ($this->languages as $language) {
             // Set the current language
-            wire('user')->language = $language;
+            // wire('user')->language = $language;
     
             // Render snippets using render_Snippet
             $snippetMarkup = $this->render_Snippet($match);
     
             // Check if snippets were found
+            bd("snippetMarkup: " . $snippetMarkup);
+
             if ($snippetMarkup) {
+                bd("checkAndRenderSnippets: " . $match->title);
                 // Return an array with the language and snippet markup
-                return [
-                    'language' => $language,
-                    'markup' => $snippetMarkup
-                ];
+                // return [
+                //     'language' => $language,
+                //     'markup' => $snippetMarkup
+                // ];
+                return $snippetMarkup;
             }
-        }
+        // }
     
         // If no snippets were found in any language, return false
         return false;
-    }
 
+    }
     
-    public function render_Snippet($match, $start = 25, $end = 25) {
+
+    public function render_Snippet($match, $snipStart = 25, $snipEnd = 25) {
 
         $maxSnippets = $this->snippets_amount;
         $html = '';
@@ -385,7 +390,11 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
     
         foreach ($uniqueFields as $field) {
             $content = strip_tags($match->$field);
-        
+    
+            // Add debugging statements
+            bd('Field: ' . $field);
+            bd('Content: ' . $content);
+    
             // Generate snippets for the entire phrase and words if found
             $positions = array();
             foreach ($searchWords as $word) {
@@ -395,48 +404,61 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
                     $wordPosition = stripos($content, $word, $wordPosition + 1);
                 }
             }
-        
+    
             // Combine positions for phrases and words
-            $positions = array_merge($positions, array_unique($positions));
-        
+            $positions = array_unique($positions);
+    
+            // Add debugging statements
+            bd('Search Words: ' . implode(', ', $searchWords));
+            bd('Positions: ' . implode(', ', $positions));
+    
             foreach ($positions as $position) {
-                $startPos = max(0, $position - $start);
-                $endPos = min(strlen($content), $position + $end);
-        
-                $snippet = substr($content, $startPos, $endPos - $startPos);
-        
-                // If snippet is identical to the previous one, skip it
-                if (!in_array($snippet, $snippets[$field])) {
+                $snipStartPos = max(0, $position - $snipStart);
+                $endPos = min(strlen($content), $position + $snipEnd);
+    
+                $snippet = substr($content, $snipStartPos, $endPos - $snipStartPos);
+    
+                // Add debugging statement
+                bd('Snippet: ' . $snippet);
+    
+                // If snippet is not empty, add it to the snippets array
+                if ($snippet !== '') {
                     $snippets[$field][] = $snippet;
                 }
             }
         }
-        
+    
         // Limit the number of snippets to a maximum of $maxSnippets
         foreach ($snippets as $field => &$fieldSnippets) {
             $fieldSnippets = array_slice($fieldSnippets, 0, $maxSnippets);
         }
-        
+    
+        // Add debugging statement
+        bd('Snippets: ' . json_encode($snippets));
+    
         // Check if there are any snippets
-        if (!empty($snippets)) {
-            // Combine snippets for each field into one string with ellipses in between
-            foreach ($snippets as $field => $fieldSnippets) {
+        foreach ($snippets as $field => $fieldSnippets) {
+            if (!empty($fieldSnippets)) {
+                // Combine snippets for each field into one string with ellipses in between
                 $combinedSnippet = implode(' ... ', $fieldSnippets);
-                $html .= $combinedSnippet . '...';
+                $html .= $combinedSnippet . ' ... ';
             }
-            $html .= '...';
-        
+        }
+    
+        // Add debugging statement
+        bd('HTML: ' . $html);
+    
+        // Check if $html is not empty, then return the snippet, otherwise return false
+        if (!empty($html)) {
             // Remove the trailing ellipsis and spaces
             $html = rtrim($html, ' ... ');
-        
-            return "<p>...$html...</p>";
+            return "<p> ... $html ... </p>";
         }
-                    
-        return false;
-
-    }
     
-
+        return false;
+    }
+        
+    
     // // Custom function to replace search term with highlighted version while preserving case
     // function replaceWithHighlight($content, $searchTerm) {
     //     $highlightedTerm = '<strong>' . $searchTerm . '</strong';
