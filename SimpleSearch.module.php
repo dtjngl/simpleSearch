@@ -179,14 +179,24 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         $sanitizer = $this->wire('sanitizer');
         $input = $this->wire('input');
     
-        // Sanitize and store the search term 'q'
+        // // Sanitize and store the search term 'q'
+        // if (isset($input->get->q)) {
+        //     $q = $sanitizer->text($input->get->q);
+        //     $q = preg_replace('/[^\p{L}\p{N}_\s]/u', '', $q);
+        //     $this->q = htmlspecialchars($q, ENT_QUOTES, 'UTF-8');
+        // } else {
+        //     $this->q = null; // or $this->q = ''; if you prefer an empty string
+        // }
+
         if (isset($input->get->q)) {
             $q = $sanitizer->text($input->get->q);
-            $q = preg_replace('/[^\p{L}\p{N}_\s]/u', '', $q);
+            // Allow letters, numbers, underscores, spaces, and dots
+            $q = preg_replace('/[^\p{L}\p{N}_\s.]/u', '', $q);
             $this->q = htmlspecialchars($q, ENT_QUOTES, 'UTF-8');
         } else {
             $this->q = null; // or $this->q = ''; if you prefer an empty string
         }
+        
     
         // Sanitize and store the category 'cat'
         if (isset($input->get->cat)) {
@@ -233,6 +243,8 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
                     }
                 }
 
+                $matches->sort("-date_modification");
+
                 // Calculate the total matches and the start index for the current page
                 $total = count($matches);
 
@@ -278,7 +290,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
 
         $fields = $this->getUniqueFieldsFromTemplate($category);
 
-        $selector .= ", " . implode('|', $fields) . "$search_operator.$q";
+        $selector .= ", " . implode('|', $fields) . "$search_operator$q";
 
         return $selector;
 
@@ -386,7 +398,7 @@ class SimpleSearch extends WireData implements Module, ConfigurableModule {
         // Surround the snippet with additional characters (e.g., <strong>)
         $snippet = $startChars . '<strong>' . $searchTerm . '</strong>' . $endChars;
 
-        return $snippet.' … ';
+        return ' … ' . $snippet . ' … ';
 
     }
         
